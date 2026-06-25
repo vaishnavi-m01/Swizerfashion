@@ -6,4 +6,5 @@ export type RootStackParamList = {
     Wishlist : undefined;
     CheckoutScreen : undefined;
     OrderDetailScreen: { orderId: string };
+    ProductList: undefined
 };

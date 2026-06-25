@@ -13,6 +13,7 @@ export const colors = {
   divider: "#F0F0F0",
 
   // Theme
+  primary: "#6200EE",
   accent: "#000000",
   accentDark: "#000000",
 

@@ -10,6 +10,10 @@ import {
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import { scale, verticalScale, fontScale } from "../utils/responsive";
+import { useNavigation } from '@react-navigation/native';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { toggleWishlist } from '../store/slices/wishlistSlice';
+import { addToCart } from '../store/slices/cartSlice';
 
 type Product = {
   id: number | string;
@@ -26,11 +30,16 @@ type Product = {
 type Props = {
   item: Product;
   onPress?: () => void;
+  isGrid?: boolean;
 };
 
-const ProductCard: React.FC<Props> = ({ item, onPress }) => {
-  const [isFavorite, setIsFavorite] = useState(false);
+const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
   const [scaleAnim] = useState(new Animated.Value(1));
+  const navigation = useNavigation<any>();
+  const dispatch = useAppDispatch();
+  const wishlistItems = useAppSelector(state => state.wishlist.items);
+  
+  const isFavorite = wishlistItems.some(wishlistItem => wishlistItem.id === item.id);
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -47,7 +56,7 @@ const ProductCard: React.FC<Props> = ({ item, onPress }) => {
   };
 
   const handleToggleFavorite = () => {
-    setIsFavorite(!isFavorite);
+    dispatch(toggleWishlist(item));
   };
 
   const calculateDiscount = () => {
@@ -67,14 +76,16 @@ const ProductCard: React.FC<Props> = ({ item, onPress }) => {
     <Animated.View
       style={[
         styles.cardWrapper,
+        isGrid && styles.cardWrapperGrid,
         {
           transform: [{ scale: scaleAnim }],
         },
       ]}
     >
       <TouchableOpacity
-        style={styles.productCard}
-        onPress={onPress}
+        style={[styles.productCard, isGrid && styles.productCardGrid]}
+        // onPress={onPress}
+        onPress={() => navigation.navigate("ProductDetails", { product: item })}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         activeOpacity={0.9}
@@ -160,7 +171,17 @@ const ProductCard: React.FC<Props> = ({ item, onPress }) => {
               styles.addButton,
               item.inStock === false && styles.addButtonDisabled,
             ]}
-            onPress={onPress}
+            // onPress={onPress}
+              onPress={() => {
+                dispatch(addToCart({ id: item.id, product: item, quantity: 1 }));
+                navigation.navigate("MainTabs", {
+                  screen: "CartTab",
+                  params: {
+                    id: 1,
+                  },
+                });
+              }
+            }
             disabled={item.inStock === false}
           >
             <Ionicons
@@ -180,22 +201,26 @@ export default ProductCard;
 
 const styles = StyleSheet.create({
   cardWrapper: {
-    marginRight: scale(12),
+    marginRight: scale(10),
     marginBottom: verticalScale(8),
   },
 
+  cardWrapperGrid: {
+    width: '48%',
+    marginBottom: verticalScale(16),
+  },
+
   productCard: {
-    width: scale(160),
+    width: scale(165),
     backgroundColor: "#FFFFFF",
-    borderRadius: scale(14),
+    borderRadius: scale(12),
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#F0F0F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    borderColor: "#EBEBEB",
+  },
+
+  productCardGrid: {
+    width: "100%",
   },
 
   productImageWrap: {
@@ -206,7 +231,7 @@ const styles = StyleSheet.create({
 
   productImage: {
     width: "100%",
-    height: verticalScale(200),
+    height: verticalScale(160),
     resizeMode: "cover",
   },
 
@@ -224,14 +249,9 @@ const styles = StyleSheet.create({
     left: scale(8),
     top: scale(8),
     backgroundColor: "#E84C3D",
-    paddingHorizontal: scale(10),
+    paddingHorizontal: scale(8),
     paddingVertical: verticalScale(4),
-    borderRadius: scale(6),
-    shadowColor: "#E84C3D",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: scale(4),
   },
 
   discountText: {
@@ -262,17 +282,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: scale(8),
     top: scale(8),
-    width: scale(32),
-    height: scale(32),
-    borderRadius: scale(16),
-    backgroundColor: "#FFFFFF",
+    width: scale(30),
+    height: scale(30),
+    borderRadius: scale(15),
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#EBEBEB",
   },
 
   favoriteActive: {

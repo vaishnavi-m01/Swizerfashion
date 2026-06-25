@@ -11,16 +11,29 @@ import {
   ImageBackground,
   FlatList,
   Modal,
+  Dimensions,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ProductCard from '../component/ProductCard';
-import { CategoryCard, CategoriesList } from '../component/CategoryCard';
+import ProductCardSkeleton from '../component/ProductCardSkeleton';
+import { CategoryCard } from '../component/CategoryCard';
+import MainHeader from '../component/MainHeader';
 import { scale, verticalScale, RESPONSIVE_PADDING, HORIZONTAL_PADDING } from '../utils/responsive';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+
+const { width } = Dimensions.get('window');
+
+const HOME_BANNERS = [
+  { id: 1, image: 'https://loremflickr.com/400/300/fashion?lock=20', tag: 'NEW SEASON', title: 'Fashion that\nspeaks for you' },
+  { id: 2, image: 'https://loremflickr.com/400/300/fashion?lock=21', tag: 'SUMMER SALE', title: 'Up to 50%\noff selected items' },
+  { id: 3, image: 'https://loremflickr.com/400/300/fashion?lock=22', tag: 'EXCLUSIVE', title: 'Premium\nCollection' },
+];
 
 const categories = [
-  { id: 1, name: 'Women', image: 'https://picsum.photos/260/320?5' },
-  { id: 2, name: 'Men', image: 'https://picsum.photos/260/320?6' },
-  { id: 3, name: 'Accessories', image: 'https://picsum.photos/260/320?7' },
+  { id: 1, name: 'Women', image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=300&auto=format&fit=crop' },
+  { id: 2, name: 'Men', image: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=300&auto=format&fit=crop' },
+  { id: 3, name: 'Accessories', image: 'https://loremflickr.com/260/320/fashion?lock=7' },
 ];
 
 const popularProducts = [
@@ -30,7 +43,7 @@ const popularProducts = [
     price: '₹1,499',
     oldPrice: '₹1,899',
     discount: '20% OFF',
-    image: 'https://picsum.photos/250/350?1',
+    image: 'https://loremflickr.com/250/350/fashion?lock=1',
     rating: 4.5,
     reviews: 128,
     inStock: true,
@@ -39,7 +52,7 @@ const popularProducts = [
     id: 2,
     name: "Men's Shirt",
     price: '₹999',
-    image: 'https://picsum.photos/250/350?2',
+    image: 'https://loremflickr.com/250/350/fashion?lock=2',
     rating: 4,
     reviews: 85,
     inStock: true,
@@ -48,7 +61,7 @@ const popularProducts = [
     id: 3,
     name: "Women's Saree",
     price: '₹2,499',
-    image: 'https://picsum.photos/250/350?3',
+    image: 'https://loremflickr.com/250/350/fashion?lock=3',
     rating: 5,
     reviews: 256,
     inStock: true,
@@ -59,84 +72,89 @@ const popularProducts = [
     price: '₹799',
     oldPrice: '₹999',
     discount: '20% OFF',
-    image: 'https://picsum.photos/250/350?4',
+    image: 'https://loremflickr.com/250/350/fashion?lock=4',
     rating: 4.5,
     reviews: 92,
     inStock: true,
   },
 ];
 
+
 const HomeScreen = () => {
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
+
+  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+
+  const handleBannerScroll = (event: any) => {
+    const slide = Math.round(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
+    if (slide !== activeBannerIndex) {
+      setActiveBannerIndex(slide);
+    }
+  };
+
+  React.useEffect(() => {
+    // Simulate real-time fetching
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="transparent" barStyle="dark-content" translucent={true} />
 
-      {/* Fixed Header */}
-      <View style={styles.headerWrapper}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.welcomeText}>Good evening</Text>
-            <Text style={styles.logoText}>SWIZER</Text>
-          </View>
-
-          <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-              <Ionicons
-                name="notifications-outline"
-                size={scale(18)}
-                color="#0A0A0A"
-              />
-              <View style={styles.badgeDot} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.avatarButton} activeOpacity={0.7}>
-              <Image
-                source={{ uri: 'https://picsum.photos/100/100?50' }}
-                style={styles.avatarImage}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Search Bar */}
-        <TouchableOpacity 
-          style={styles.searchBar}
-          activeOpacity={0.7}
-          onPress={() => setSearchModalVisible(true)}
-        >
-          <Ionicons
-            name="search-outline"
-            size={scale(16)}
-            color="#999"
-            style={{ marginRight: scale(10) }}
-          />
-          <Text style={styles.searchBarPlaceholder}>Search fashion...</Text>
-        </TouchableOpacity>
-      </View>
+      <MainHeader onSearchPress={() => setSearchModalVisible(true)} />
 
       {/* Scrollable Content */}
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
 
-        {/* Banner */}
-        <ImageBackground
-          source={{ uri: 'https://picsum.photos/400/300?20' }}
-          style={styles.banner}
-          imageStyle={styles.bannerImage}
-        >
-          <View style={styles.bannerOverlay}>
-            <Text style={styles.bannerTag}>NEW SEASON</Text>
-            <Text style={styles.bannerTitle}>
-              Fashion that{'\n'}speaks for you
-            </Text>
-            <TouchableOpacity style={styles.shopButton}>
-              <Text style={styles.shopButtonText}>Shop now</Text>
-              <Ionicons name="arrow-forward" size={14} color="#FFF" />
-            </TouchableOpacity>
+        {/* Swipable Banner */}
+        <View style={styles.bannerWrapper}>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={handleBannerScroll}
+            scrollEventThrottle={16}
+            style={{ width }}
+          >
+            {HOME_BANNERS.map((banner) => (
+              <View key={banner.id} style={{ width }}>
+                <ImageBackground
+                  source={{ uri: banner.image }}
+                  style={styles.banner}
+                  imageStyle={styles.bannerImage}
+                >
+                  <View style={styles.bannerOverlay}>
+                    <Text style={styles.bannerTag}>{banner.tag}</Text>
+                    <Text style={styles.bannerTitle}>{banner.title}</Text>
+                    <TouchableOpacity style={styles.shopButton}>
+                      <Text style={styles.shopButtonText}>Shop now</Text>
+                      <Ionicons name="arrow-forward" size={14} color="#FFF" />
+                    </TouchableOpacity>
+                  </View>
+                </ImageBackground>
+              </View>
+            ))}
+          </ScrollView>
+
+          <View style={styles.bannerDots}>
+            {HOME_BANNERS.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  activeBannerIndex === index && styles.activeDot
+                ]}
+              />
+            ))}
           </View>
-        </ImageBackground>
+        </View>
 
         {/* Categories */}
         <View style={styles.sectionHeader}>
@@ -146,13 +164,20 @@ const HomeScreen = () => {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingLeft: HORIZONTAL_PADDING, paddingRight: HORIZONTAL_PADDING }}
+          contentContainerStyle={{
+            paddingLeft: HORIZONTAL_PADDING,
+            paddingRight: HORIZONTAL_PADDING,
+          }}
         >
           {categories.map(cat => (
             <CategoryCard
               key={cat.id}
               category={cat}
-              onPress={() => console.log(cat.name)}
+              onPress={() =>
+                navigation.navigate('ProductsTab', {
+                  categoryId: cat.id,
+                })
+              }
             />
           ))}
         </ScrollView>
@@ -166,29 +191,29 @@ const HomeScreen = () => {
         </View>
 
         <FlatList
-          data={popularProducts}
+          data={isLoading ? [1, 2, 3, 4] as any[] : popularProducts}
           horizontal
           showsHorizontalScrollIndicator={false}
-          keyExtractor={item => item.id.toString()}
+          keyExtractor={item => (isLoading ? item.toString() : item.id.toString())}
           contentContainerStyle={{ paddingLeft: HORIZONTAL_PADDING, paddingRight: HORIZONTAL_PADDING }}
           renderItem={({ item }) => (
-            <ProductCard item={item} onPress={() => console.log(item.name)} />
+            isLoading ? <ProductCardSkeleton /> : <ProductCard item={item as any} onPress={() => console.log(item.name)} />
           )}
           scrollEventThrottle={16}
           decelerationRate="fast"
         />
       </ScrollView>
 
-      {/* Search Modal */}
+
       <Modal
         visible={searchModalVisible}
         animationType="slide"
         transparent={false}
         statusBarTranslucent={true}
       >
-        <View style={styles.searchModalContainer}>
+        <View style={[styles.searchModalContainer, { paddingTop: Math.max(insets.top, verticalScale(12)) }]}>
           <StatusBar backgroundColor="transparent" barStyle="dark-content" translucent={true} />
-          
+
           {/* Search Modal Header */}
           <View style={styles.searchModalHeader}>
             <TouchableOpacity
@@ -219,6 +244,7 @@ const HomeScreen = () => {
             </View>
           </View>
 
+
           {/* Search Results */}
           <ScrollView style={styles.searchResultsContainer} showsVerticalScrollIndicator={false}>
             {searchQuery.length === 0 ? (
@@ -231,10 +257,10 @@ const HomeScreen = () => {
                 <Text style={styles.searchResultsTitle}>
                   Results for "{searchQuery}"
                 </Text>
-                {/* Add search results here */}
               </View>
             )}
           </ScrollView>
+
         </View>
       </Modal>
     </View>
@@ -249,20 +275,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
 
+
   headerWrapper: {
     backgroundColor: '#FFFFFF',
-    paddingTop: verticalScale(10),
-    paddingBottom: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 3,
-    zIndex: 10,
-  },
+    paddingBottom: verticalScale(16),
+    borderBottomLeftRadius: scale(24),
+    borderBottomRightRadius: scale(24),
 
-  scrollContent: {
-    flex: 1,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 8,
   },
 
   header: {
@@ -270,10 +297,93 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: HORIZONTAL_PADDING,
-    paddingTop: verticalScale(12),
-    paddingBottom: verticalScale(12),
-    backgroundColor: '#FFFFFF',
   },
+
+  headerLeft: {
+    flex: 1,
+  },
+
+  greeting: {
+    fontSize: scale(12),
+    color: '#888',
+    marginBottom: 2,
+  },
+
+  brandName: {
+    fontSize: scale(28),
+    fontWeight: '800',
+    color: '#111',
+    letterSpacing: 2,
+  },
+
+  subTitle: {
+    fontSize: scale(12),
+    color: '#777',
+    marginTop: 2,
+  },
+
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  headerIcon: {
+    width: scale(42),
+    height: scale(42),
+    borderRadius: scale(21),
+    backgroundColor: '#F8F8F8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: scale(10),
+  },
+
+  notificationDot: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
+  },
+
+  profileContainer: {
+    marginLeft: scale(12),
+  },
+
+  profileImage: {
+    width: scale(42),
+    height: scale(42),
+    borderRadius: scale(21),
+    borderWidth: 2,
+    borderColor: '#111',
+  },
+
+  searchBar: {
+    marginTop: verticalScale(18),
+    marginHorizontal: HORIZONTAL_PADDING,
+    backgroundColor: '#F6F6F6',
+    height: scale(52),
+    borderRadius: scale(16),
+
+    flexDirection: 'row',
+    alignItems: 'center',
+
+    paddingHorizontal: scale(16),
+
+    borderWidth: 1,
+    borderColor: '#ECECEC',
+  },
+
+  searchPlaceholder: {
+    marginLeft: scale(12),
+    color: '#999',
+    fontSize: scale(14),
+  },
+  scrollContent: {
+    flex: 1,
+  },
+
 
   welcomeText: {
     fontSize: scale(10),
@@ -331,19 +441,6 @@ const styles = StyleSheet.create({
     height: '100%',
   },
 
-  searchBar: {
-    marginHorizontal: HORIZONTAL_PADDING,
-    marginTop: verticalScale(12),
-    marginBottom: verticalScale(12),
-    backgroundColor: '#F5F5F5',
-    borderRadius: scale(12),
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: scale(14),
-    height: scale(42),
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-  },
 
   searchBarPlaceholder: {
     flex: 1,
@@ -359,10 +456,11 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
 
-  // Search Modal Styles
+  
   searchModalContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    paddingTop: verticalScale(12)
   },
 
   searchModalHeader: {
@@ -435,6 +533,9 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(16),
   },
 
+  bannerWrapper: {
+    position: 'relative',
+  },
   banner: {
     marginHorizontal: HORIZONTAL_PADDING,
     height: scale(180),
@@ -444,6 +545,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0A',
     marginBottom: verticalScale(24),
     marginTop: verticalScale(8),
+  },
+  bannerDots: {
+    position: 'absolute',
+    bottom: verticalScale(10),
+    flexDirection: 'row',
+    alignSelf: 'center',
+    width: '100%',
+    justifyContent: 'center',
+  },
+  dot: {
+    width: scale(6),
+    height: scale(6),
+    borderRadius: scale(3),
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    marginHorizontal: scale(4),
+  },
+  activeDot: {
+    backgroundColor: '#0A0A0A',
+    width: scale(16),
   },
 
   bannerImage: {

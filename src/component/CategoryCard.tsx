@@ -19,60 +19,41 @@ interface CategoryCardProps {
   category: Category;
   onPress?: () => void;
   style?: ViewStyle;
+  active?: boolean;
 }
 
 export const CategoryCard: React.FC<CategoryCardProps> = ({
   category,
   onPress,
   style,
+  active = false,
 }) => {
-  const cardSize = scale(84);
+  const cardSize = scale(72);
 
   return (
     <TouchableOpacity
       style={[styles.container, style]}
       onPress={onPress}
+    
       activeOpacity={0.7}
     >
-      <View style={[styles.categoryImageRing, { width: cardSize, height: cardSize, borderRadius: cardSize / 2 }]}>
-        <Image
-          source={{ uri: category.image }}
-          style={styles.categoryImage}
-        />
+      <View
+        style={[
+          styles.categoryImageRing,
+          { width: cardSize, height: cardSize, borderRadius: cardSize / 2 },
+          active && styles.categoryImageRingActive,
+        ]}
+      >
+        <Image source={{ uri: category.image }} style={styles.categoryImage} />
       </View>
-      <Text style={styles.categoryTitle}>{category.name}</Text>
+      <Text style={[styles.categoryTitle, active && styles.categoryTitleActive]}>
+        {category.name}
+      </Text>
     </TouchableOpacity>
   );
 };
 
-interface CategoriesListProps {
-  categories: Category[];
-  onCategoryPress?: (category: Category) => void;
-  horizontal?: boolean;
-}
 
-export const CategoriesList: React.FC<CategoriesListProps> = ({
-  categories,
-  onCategoryPress,
-  horizontal = true,
-}) => {
-  return (
-    <View
-      style={[
-        styles.listContainer,
-        horizontal && styles.listHorizontal,
-      ]}
-    >
-      {categories.map(cat => (
-        <CategoryCard
-          key={cat.id}
-          category={cat}
-          onPress={() => onCategoryPress?.(cat)}
-        />
-      ))}
-    </View>
-  );
-};
 
 const styles = StyleSheet.create({
   container: {
@@ -84,14 +65,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: verticalScale(10),
+    marginBottom: verticalScale(6),
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10,
+    shadowRadius: 6,
+    elevation: 3,
+    borderWidth: 2,
+    borderColor: '#E8E8E8',
+  },
+  categoryImageRingActive: {
+    borderColor: '#000000',
+    borderWidth: 2.5,
   },
 
   categoryImage: {
@@ -101,11 +86,15 @@ const styles = StyleSheet.create({
   },
 
   categoryTitle: {
-    color: '#0A0A0A',
+    color: '#555555',
     fontWeight: '500',
-    fontSize: scale(13),
+    fontSize: scale(11),
     textAlign: 'center',
-    maxWidth: scale(92),
+    maxWidth: scale(70),
+  },
+  categoryTitleActive: {
+    color: '#000000',
+    fontWeight: '700',
   },
 
   listContainer: {

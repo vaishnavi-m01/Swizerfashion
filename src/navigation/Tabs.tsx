@@ -1,16 +1,15 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Platform, TouchableOpacity } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
-import HomeScreen from "../screen/HomeScreen";
-import MenuScreen from "../screen/MenuScreen";
-
-
-import { colors } from "../theme/Colors";
-import CartScreen from "../screen/CartScreen";
-import OrderScreen from "../screen/OrderScreen";
-import ProfileScreen from "../screen/ProfileScreen";
+import HomeScreen from "../tabs/HomeScreen";
+import MenuScreen from "../tabs/MenuScreen";
+import CartScreen from "../tabs/CartScreen";
+import OrderScreen from "../tabs/OrderScreen";
+import ProfileScreen from "../tabs/ProfileScreen";
+import { scale } from "../utils/responsive";
 
 export type MainTabParamList = {
   HomeTab: undefined;
@@ -29,45 +28,47 @@ export default function MainTabNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-
-        tabBarActiveTintColor: "#000",
-        tabBarInactiveTintColor: "#999",
-
+        tabBarActiveTintColor: "#0A0A0A",
+        tabBarInactiveTintColor: "#9CA3AF",
         tabBarStyle: {
           backgroundColor: "#FFFFFF",
           borderTopWidth: 1,
-          borderTopColor: "#EEEEEE",
-          height: 65 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+          borderTopColor: '#F3F4F6', 
+          elevation: 0,
+          shadowOpacity: 0,
+          height: Platform.OS === 'ios' ? 85 + insets.bottom : 60 + (insets.bottom || 10),
+          paddingBottom: insets.bottom || 8,
           paddingTop: 8,
         },
-
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: scale(10.5),
           fontWeight: "600",
-          marginBottom: 4,
+          marginTop: 4,
         },
-
-        tabBarIcon: ({ color, focused, size }) => {
+        // Removing the default gray ripple effect
+        tabBarButton: (props) => (
+          <TouchableOpacity 
+            {...(props as any)} 
+            activeOpacity={0.7}
+            style={props.style}
+          />
+        ),
+        tabBarIcon: ({ color, focused }) => {
           let iconName = "";
 
           switch (route.name) {
             case "HomeTab":
               iconName = focused ? "home" : "home-outline";
               break;
-
             case "ProductsTab":
               iconName = focused ? "grid" : "grid-outline";
               break;
-
             case "CartTab":
               iconName = focused ? "cart" : "cart-outline";
               break;
-
             case "OrdersTab":
               iconName = focused ? "receipt" : "receipt-outline";
               break;
-
             case "ProfileTab":
               iconName = focused ? "person" : "person-outline";
               break;
@@ -76,7 +77,7 @@ export default function MainTabNavigator() {
           return (
             <Ionicons
               name={iconName}
-              size={24}
+              size={scale(22)}
               color={color}
             />
           );
@@ -86,41 +87,27 @@ export default function MainTabNavigator() {
       <Tab.Screen
         name="HomeTab"
         component={HomeScreen}
-        options={{
-          tabBarLabel: "Home",
-        }}
+        options={{ tabBarLabel: "Home" }}
       />
-
       <Tab.Screen
         name="ProductsTab"
         component={MenuScreen}
-        options={{
-          tabBarLabel: "Products",
-        }}
+        options={{ tabBarLabel: "Shop" }}
       />
-
       <Tab.Screen
         name="CartTab"
         component={CartScreen}
-        options={{
-          tabBarLabel: "Cart",
-        }}
+        options={{ tabBarLabel: "Cart" }}
       />
-
       <Tab.Screen
         name="OrdersTab"
         component={OrderScreen}
-        options={{
-          tabBarLabel: "Orders",
-        }}
+        options={{ tabBarLabel: "Orders" }}
       />
-
       <Tab.Screen
         name="ProfileTab"
         component={ProfileScreen}
-        options={{
-          tabBarLabel: "Profile",
-        }}
+        options={{ tabBarLabel: "Profile" }}
       />
     </Tab.Navigator>
   );
