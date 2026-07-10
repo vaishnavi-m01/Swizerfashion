@@ -10,17 +10,87 @@ import {
     Platform,
     ScrollView,
     StatusBar,
+    ToastAndroid,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
+import api, { setAuthToken } from '../config/apiConfig';
+import { useAppDispatch } from '../store/hooks';
+import { login } from '../store/slices/authSlice';
+import { saveAuthState } from '../utils/storage';
+import { Alert, ActivityIndicator } from 'react-native';
 
 const logo = require('../asset/images/logo.png');
 
 const Login = () => {
     const navigation = useNavigation<any>();
-    const [email, setEmail] = useState('');
+    const dispatch = useAppDispatch();
+    const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [errors, setErrors] = useState<{[key: string]: string}>({});
+
+    const handleLogin = async () => {
+        const newErrors: {[key: string]: string} = {};
+        if (!phone) newErrors.phone = 'Phone number is required';
+        if (!password) newErrors.password = 'Password is required';
+        else if (password.length < 4) newErrors.password = 'Password must be at least 4 characters';
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            return;
+        }
+        setErrors({});
+        
+        try {
+            setIsLoading(true);
+            const response = await api.post('/login', {
+                mobile: phone,
+                password,
+            });
+            // API response: { status, access_token, token_type, data: { id, name, email, mobile, role, is_verified } }
+            if (response.data && response.data.access_token) {
+                const token    = response.data.access_token;
+                const tokenType = response.data.token_type ?? 'Bearer';
+                const userData = response.data.data ?? null;
+                const userId   = userData?.id ?? null;
+
+                console.log('[Login] Storing session — userId:', userId, 'name:', userData?.name);
+
+                // Attach token to all future API requests
+                setAuthToken(token);
+
+                const loginPayload = { token, tokenType, userId, user: userData };
+
+                // Clear old session and store fresh login response
+                dispatch(login(loginPayload));
+                await saveAuthState(loginPayload);
+
+                // Verify what's now stored in Redux
+                const { store: reduxStore } = require('../store/store');
+                const storedAuth = reduxStore.getState().auth;
+                console.log('=== LOGIN \u2014 Redux Auth State After Dispatch ===');
+                console.log('isLoggedIn:', storedAuth.isLoggedIn);
+                console.log('userId    :', storedAuth.userId);
+                console.log('token     :', storedAuth.token);
+                console.log('user      :', JSON.stringify(storedAuth.user, null, 2));
+                console.log('axios Auth:', require('../config/apiConfig').default.defaults.headers.common['Authorization'] ?? 'NOT SET \u274c');
+                console.log('================================================');
+
+                if (Platform.OS === 'android') {
+                    ToastAndroid.show('Login successful! Welcome back 👋', ToastAndroid.SHORT);
+                }
+                navigation.navigate('MainTabs');
+            } else {
+                Alert.alert('Error', 'Invalid login response');
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'Login failed');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <KeyboardAvoidingView
@@ -45,41 +115,49 @@ const Login = () => {
                     <Text style={styles.title}>Welcome back</Text>
                     <Text style={styles.subtitle}>Sign in to your account</Text>
 
-                    {/* Email */}
+                    {/* Phone */}
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Email</Text>
-                        <View style={styles.inputWrapper}>
+                        <Text style={styles.label}>Phone Number <Text style={styles.requiredStar}>*</Text></Text>
+                        <View style={[styles.inputWrapper, errors.phone ? styles.inputError : null]}>
                             <TextInput
                                 style={styles.input}
-                                placeholder="Enter your email"
+                                placeholder="Enter your phone number"
                                 placeholderTextColor="#B0B0B0"
-                                value={email}
-                                onChangeText={setEmail}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
+                                value={phone}
+                                onChangeText={(text) => {
+                                    setPhone(text);
+                                    if (errors.phone) setErrors({...errors, phone: ''});
+                                }}
+                                keyboardType="phone-pad"
+                                maxLength={10}
                             />
                         </View>
+                        {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
                     </View>
 
                     {/* Password */}
                     <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Password</Text>
-                        <View style={styles.inputWrapper}>
+                        <Text style={styles.label}>Password <Text style={styles.requiredStar}>*</Text></Text>
+                        <View style={[styles.inputWrapper, errors.password ? styles.inputError : null]}>
                             <TextInput
                                 style={[styles.input, { flex: 1 }]}
                                 placeholder="Enter your password"
                                 placeholderTextColor="#B0B0B0"
                                 value={password}
-                                onChangeText={setPassword}
+                                onChangeText={(text) => {
+                                    setPassword(text);
+                                    if (errors.password) setErrors({...errors, password: ''});
+                                }}
                                 secureTextEntry={!showPassword}
                             />
                             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                                 <Text style={styles.showHide}>{showPassword ? 'Hide' : 'Show'}</Text>
                             </TouchableOpacity>
                         </View>
+                        {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
                     </View>
 
-                    <TouchableOpacity style={styles.forgotBtn}>
+                    <TouchableOpacity style={styles.forgotBtn} onPress={() => navigation.navigate('ForgotPassword')}>
                         <Text style={styles.forgotText}>Forgot password?</Text>
                     </TouchableOpacity>
 
@@ -87,9 +165,14 @@ const Login = () => {
                     <TouchableOpacity
                         style={styles.loginBtn}
                         activeOpacity={0.85}
-                        onPress={() => navigation.navigate('MainTabs')}
+                        onPress={handleLogin}
+                        disabled={isLoading}
                     >
-                        <Text style={styles.loginBtnText}>Sign In</Text>
+                        {isLoading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.loginBtnText}>Sign In</Text>
+                        )}
                     </TouchableOpacity>
 
                     {/* Divider */}
@@ -184,6 +267,18 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: scale(14),
         color: '#0A0A0A',
+    },
+    inputError: {
+        borderColor: '#EF4444',
+    },
+    errorText: {
+        color: '#EF4444',
+        fontSize: scale(11),
+        marginTop: verticalScale(4),
+        marginLeft: scale(4),
+    },
+    requiredStar: {
+        color: '#EF4444',
     },
     showHide: {
         fontSize: scale(13),

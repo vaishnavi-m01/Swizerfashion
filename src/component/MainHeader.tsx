@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Platform, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { scale, verticalScale, HORIZONTAL_PADDING } from '../utils/responsive';
@@ -16,8 +16,8 @@ interface Props {
 const MainHeader: React.FC<Props> = ({ onSearchPress }) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const cartItems = useAppSelector(state => state.cart.items);
-  const cartCount = cartItems.length;
+  const cartCount = useAppSelector(state => state.cart.cartCount);
+  const wishlistItems = useAppSelector(state => state.wishlist.items);
 
   return (
     <View
@@ -50,6 +50,7 @@ const MainHeader: React.FC<Props> = ({ onSearchPress }) => {
             onPress={() => navigation.navigate("Wishlist")}
           >
             <Ionicons name="heart-outline" size={scale(20)} color="#1A1A1A" />
+            {wishlistItems.length > 0 && <View style={styles.notificationDot} />}
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -59,7 +60,11 @@ const MainHeader: React.FC<Props> = ({ onSearchPress }) => {
           >
             {/* <Ionicons name="bag-handle-outline" size={scale(20)} color="#1A1A1A" /> */}
             <Ionicons name="cart-outline" color="#1A1A1A" size={24} />
-            {cartCount > 0 && <View style={styles.notificationDot} />}
+            {cartCount > 0 && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>{cartCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -118,6 +123,25 @@ const styles = StyleSheet.create({
     // Subtle border for the button to make it pop over backgrounds
     borderWidth: 1,
     borderColor: '#EFEFEF',
+  },
+  badgeContainer: {
+    position: 'absolute',
+    top: -2,
+    right: -4,
+    backgroundColor: '#E84C3D',
+    borderRadius: scale(10),
+    minWidth: scale(16),
+    height: scale(16),
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: scale(4),
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: scale(9),
+    fontWeight: 'bold',
   },
   notificationDot: {
     position: 'absolute',

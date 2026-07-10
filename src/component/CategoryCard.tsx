@@ -8,6 +8,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { scale, verticalScale, RESPONSIVE_PADDING } from '../utils/responsive';
+import { IMAGE_BASE_URL } from '../api/apiBaseUrl';
 
 interface Category {
   id: number;
@@ -29,6 +30,15 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
   active = false,
 }) => {
   const cardSize = scale(72);
+  let imageUrl = category.image 
+    ? (category.image.startsWith('http') ? category.image : `${IMAGE_BASE_URL}${category.image}`)
+    : `https://loremflickr.com/200/200/fashion?lock=${category.id}`;
+
+  if (category.name?.toLowerCase() === 'men') {
+    imageUrl = 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=300&auto=format&fit=crop';
+  } else if (category.name?.toLowerCase() === 'women') {
+    imageUrl = 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=300&auto=format&fit=crop';
+  }
 
   return (
     <TouchableOpacity
@@ -44,7 +54,7 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
           active && styles.categoryImageRingActive,
         ]}
       >
-        <Image source={{ uri: category.image }} style={styles.categoryImage} />
+        <Image source={{ uri: imageUrl }} style={styles.categoryImage} />
       </View>
       <Text style={[styles.categoryTitle, active && styles.categoryTitleActive]}>
         {category.name}

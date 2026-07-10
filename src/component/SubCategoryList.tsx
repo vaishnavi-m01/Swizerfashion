@@ -8,46 +8,41 @@ import {
   View,
 } from 'react-native';
 import { scale, verticalScale } from '../utils/responsive';
-import { useNavigation } from '@react-navigation/native';
+import { IMAGE_BASE_URL } from '../api/apiBaseUrl';
 
-type SubCategory = {
+type Item = {
   id: number;
-  categoryId: number;
   name: string;
   image?: string;
+  [key: string]: any;
 };
 
 type Props = {
-  subcategories: SubCategory[];
-  selectedCategory: number;
-  selectedSubCategory: number | null;
-  onSelect: (id: number) => void;
+  data: Item[];
+  activeItemId?: number | null;
+  onItemPress: (item: Item) => void;
 };
 
 const SubCategoryList: React.FC<Props> = ({
-  subcategories,
-  selectedCategory,
-  selectedSubCategory,
-  onSelect,
+  data,
+  activeItemId,
+  onItemPress,
 }) => {
-  const filteredSubCategories = subcategories.filter(
-    item => item.categoryId === selectedCategory,
-  );
 
-  const navigation = useNavigation<any>();
+  const renderItem = ({ item }: { item: Item }) => {
+    const isActive = activeItemId === item.id;
+    const imageUrl = item.image 
+      ? (item.image.startsWith('http') ? item.image : `${IMAGE_BASE_URL}${item.image}`) 
+      : `https://loremflickr.com/300/300/fashion?lock=${item.id}`;
 
-  const renderItem = ({ item }: { item: SubCategory }) => {
-    const isActive = selectedSubCategory === item.id;
     return (
       <TouchableOpacity
         activeOpacity={0.8}
         style={[styles.itemContainer, isActive && styles.activeContainer]}
-        onPress={() => navigation.navigate("ProductList")}
+        onPress={() => onItemPress(item)}
       >
         <Image
-          source={{
-            uri: item.image || `https://loremflickr.com/300/300/fashion?lock=${item.id}`,
-          }}
+          source={{ uri: imageUrl }}
           style={styles.image}
         />
         
@@ -59,7 +54,6 @@ const SubCategoryList: React.FC<Props> = ({
             {item.name}
           </Text>
         </View>
-
       </TouchableOpacity>
     );
   };
@@ -67,7 +61,7 @@ const SubCategoryList: React.FC<Props> = ({
   return (
     <View style={styles.container}>
       <FlatList
-        data={filteredSubCategories}
+        data={data}
         keyExtractor={item => item.id.toString()}
         renderItem={renderItem}
         numColumns={2}

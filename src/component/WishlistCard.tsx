@@ -1,31 +1,62 @@
 import React from "react";
-import { Image, StyleSheet, Text, View, TouchableOpacity } from "react-native";
+import { Image, StyleSheet, Text, View, TouchableOpacity, ActivityIndicator } from "react-native";
 import { moderateScale, scale, verticalScale } from "../utils/responsive";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { IMAGE_BASE_URL } from "../api/apiBaseUrl";
+import { useNavigation } from '@react-navigation/native';
 
 interface WishlistCardProps {
     item: {
         id: string | number;
-        name: string;
-        image: string;
-        price: string;
+        product_id?: number;
+        variant_id?: number;
+        product?: any;
+        // flat shape fallbacks
+        name?: string;
+        image?: string;
+        price?: string;
         oldPrice?: string;
     };
-    onRemove?: (id: string | number) => void;
+    onRemove?: (item: any) => void;
     onAddToCart?: (item: any) => void;
     onPress?: () => void;
+    isAddingToCart?: boolean;
 }
 
-const WishlistCard: React.FC<WishlistCardProps> = ({ item, onRemove, onAddToCart, onPress }) => {
+
+
+
+const WishlistCard: React.FC<WishlistCardProps> = ({ item, onRemove, onAddToCart, onPress, isAddingToCart }) => {
+    const productData = item.product ?? item;
+    console.log("WishlistCard ProductDetails", item)
+    const name = productData.name ?? '';
+    const resolveImage = (value?: string) => {
+        if (!value) return '';
+        if (value.startsWith('http')) return value;
+        return `${IMAGE_BASE_URL}${value.startsWith('/') ? value.slice(1) : value}`;
+    };
+    const image = resolveImage(productData.image ?? productData.thumbnail ?? item.product_varient?.thumbnail ?? '');
+    const priceValue = productData.discount_price ?? productData.price ?? item.product_varient?.discount_price ?? item.product_varient?.price ?? item.price ?? productData.base_price;
+    const price = priceValue != null && priceValue !== '' ? `₹${priceValue}` : '';
+    const oldPrice = productData.old_price != null ? `₹${productData.old_price}` : (item.oldPrice ?? undefined);
+    const navigation = useNavigation<any>();
+
+
+    const handlePress = () => {
+        const variantId = item.product_varient?.id ?? item.variant_id;
+        if (!variantId) return;
+        navigation.navigate("ProductDetails", { id: variantId });
+    };
+
     return (
-        <TouchableOpacity style={styles.wishlistCard} activeOpacity={1} onPress={onPress}>
+        <TouchableOpacity style={styles.wishlistCard} activeOpacity={1} onPress={handlePress}>
             {/* Image Container */}
             <View style={styles.productImageWrap}>
-                <Image source={{ uri: item.image }} style={styles.productImage} />
+                <Image source={{ uri: image || 'https://via.placeholder.com/300x400?text=No+Image' }} style={styles.productImage} />
                 {onRemove && (
                     <TouchableOpacity
                         style={styles.favoriteButton}
-                        onPress={() => onRemove(item.id)}
+                        onPress={() => onRemove(item)}
                         activeOpacity={0.8}
                     >
                         <Ionicons name="heart" size={scale(15)} color="#FFFFFF" />
@@ -35,22 +66,29 @@ const WishlistCard: React.FC<WishlistCardProps> = ({ item, onRemove, onAddToCart
 
             {/* Product Details */}
             <View style={styles.detailsWrap}>
-                <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.productName} numberOfLines={1}>{name}</Text>
                 <View style={styles.priceRow}>
-                    <Text style={styles.price}>{item.price}</Text>
-                    {item.oldPrice && <Text style={styles.oldPrice}>{item.oldPrice}</Text>}
+                    <Text style={styles.price}>{price}</Text>
+                    {oldPrice && <Text style={styles.oldPrice}>{oldPrice}</Text>}
                 </View>
             </View>
 
             {/* Action Button */}
             {onAddToCart && (
                 <TouchableOpacity
-                    style={styles.addToCartBtn}
-                    onPress={() => onAddToCart(item)}
+                    style={[styles.addToCartBtn, isAddingToCart && styles.addToCartBtnDisabled]}
+                    onPress={() => !isAddingToCart && onAddToCart(item)}
+                    disabled={isAddingToCart}
                     activeOpacity={0.7}
                 >
-                    <Ionicons name="bag-add-outline" size={scale(14)} color="#FFFFFF" style={styles.cartIcon} />
-                    <Text style={styles.addToCartText}>ADD TO CART</Text>
+                    {isAddingToCart ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: scale(6) }} />
+                    ) : (
+                        <Ionicons name="bag-add-outline" size={scale(14)} color="#FFFFFF" style={styles.cartIcon} />
+                    )}
+                    <Text style={styles.addToCartText}>
+                        {isAddingToCart ? 'PROCESSING...' : 'ADD TO CART'}
+                    </Text>
                 </TouchableOpacity>
             )}
         </TouchableOpacity>
@@ -134,6 +172,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#0A0A0A',
+    },
+    addToCartBtnDisabled: {
+        backgroundColor: '#555555',
     },
     cartIcon: {
         marginRight: scale(6),

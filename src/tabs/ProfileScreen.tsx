@@ -1,12 +1,26 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Image, Alert } from "react-native";
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Image, Alert, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { moderateScale, scale, verticalScale } from '../utils/responsive';
 import { colors } from '../theme/Colors';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
-import { useAppSelector } from '../store/hooks';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { logout } from '../store/slices/authSlice';
+import { clearAuthState } from '../utils/storage';
+import api from '../config/apiConfig';
+
+interface UserProfile {
+    id: number;
+    name: string;
+    username: string | null;
+    role: string;
+    is_active: boolean;
+    email: string;
+    avatar: string | null;
+    phone: string;
+}
 
 const menuOptions = [
     { icon: 'location-outline', label: 'Manage Shipping Address', action: 'DeliveryAddress' },
@@ -14,37 +28,83 @@ const menuOptions = [
     { icon: 'notifications-outline', label: 'Notification Preferences', action: 'notifications' },
     { icon: 'help-circle-outline', label: 'Support & Help Center', action: 'help' },
     { icon: 'shield-checkmark-outline', label: 'Privacy & Security', action: 'privacy' },
+    { icon: 'lock-open-outline', label: 'Forgot Password', action: 'ForgotPassword' } // Fixed entry syntax
 ];
 
 const ProfileScreen = () => {
     const [profileImage, setProfileImage] = useState<string | null>(null);
+    const [userData, setUserData] = useState<UserProfile | null>(null);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     const navigation = useNavigation<any>();
+    const dispatch = useAppDispatch();
 
     const membershipLevel = 'Platinum Member';
     const orders = ['order1', 'order2', 'order3'];
-    const cartItems = useAppSelector(state => state.cart.items);
-    const cartCount = cartItems.length;
+    const cartItems = useAppSelector(state => state.cart.cartCount);
     const loyaltyPoints = 350;
 
+    // Fetch dynamic profile data from your API
+    const fetchProfile = async () => {
+        try {
+            setIsLoading(true);
+            const response = await api.get('/profile');
+            if (response.data && response.data.status) {
+                setUserData(response.data.data);
+                if (response.data.data.avatar) {
+                    setProfileImage(response.data.data.avatar);
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching profile:", error);
+            Alert.alert("Error", "Failed to load profile details.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
+    useEffect(() => {
+        fetchProfile();
+    }, []);
+
+    const onRefresh = useCallback(() => {
+        setRefreshing(true);
+        fetchProfile().finally(() => setRefreshing(false));
+    }, []);
+
+    // Get fallback letters from dynamic name (e.g., "Vaishu" -> "V")
+    const getNameInitials = (name: string) => {
+        if (!name) return 'U';
+        return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    };
 
     const handleMenuPress = (action: string) => {
         if (action === 'DeliveryAddress') {
             navigation.navigate('DeliveryAddress');
-        } else {
+        } else if (action === 'ForgotPassword') {
+            navigation.navigate('ForgotPassword');     
+        } 
+        else if (action === 'notifications') {
+            navigation.navigate('NotificationPreferencesScreen');            
+        }
+        else if (action === "payments") {
+            navigation.navigate("PaymentMethodsScreen")
+        }
+        else if (action === "help") {
+            navigation.navigate("SupportHelpScreen")
+        }
+        else if (action === "privacy") {
+            navigation.navigate("PrivacySecurityScreen")
+        }
+        else {
             Alert.alert('Coming Soon');
         }
     };
 
-
     const openCamera = () => {
         launchCamera(
-            {
-                mediaType: 'photo',
-                quality: 0.8,
-                saveToPhotos: true,
-            },
+            { mediaType: 'photo', quality: 0.8, saveToPhotos: true },
             response => {
                 if (response.didCancel) return;
                 if (response.assets?.length) {
@@ -56,10 +116,7 @@ const ProfileScreen = () => {
 
     const openGallery = () => {
         launchImageLibrary(
-            {
-                mediaType: 'photo',
-                quality: 0.8,
-            },
+            { mediaType: 'photo', quality: 0.8 },
             response => {
                 if (response.didCancel) return;
                 if (response.assets?.length) {
@@ -81,6 +138,33 @@ const ProfileScreen = () => {
         );
     };
 
+    const handleLogout = async () => {
+        Alert.alert(
+            'Sign Out',
+            'Are you sure you want to sign out?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Sign Out',
+                    style: 'destructive',
+                    onPress: async () => {
+                        dispatch(logout());
+                        await clearAuthState();
+                        navigation.navigate('Login');
+                    },
+                },
+            ]
+        );
+    };
+
+    if (isLoading) {
+        return (
+            <SafeAreaView style={[styles.container, styles.center]}>
+                <ActivityIndicator size="large" color={colors.accentDark || '#4A154B'} />
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header Container */}
@@ -96,15 +180,28 @@ const ProfileScreen = () => {
                 </View>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                {/* User Profile Summary Card */}
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={['#0A0A0A']}
+                        tintColor="#0A0A0A"
+                    />
+                }
+            >
+                {/* Dynamic User Profile Summary Card */}
                 <View style={styles.profileCard}>
                     <View style={styles.avatarContainer}>
                         {profileImage ? (
                             <Image source={{ uri: profileImage }} style={styles.avatarImage} />
                         ) : (
                             <View style={styles.avatarPlaceholder}>
-                                <Text style={styles.avatarLetters}>MS</Text>
+                                <Text style={styles.avatarLetters}>
+                                    {userData ? getNameInitials(userData.name) : 'MS'}
+                                </Text>
                             </View>
                         )}
 
@@ -112,8 +209,10 @@ const ProfileScreen = () => {
                             <Ionicons name="camera" size={moderateScale(12)} color="#fff" />
                         </TouchableOpacity>
                     </View>
-                    <Text style={styles.userName}>Maya Sharma</Text>
-                    <Text style={styles.userEmail}>maya.sharma@example.com</Text>
+                    
+                    {/* DYNAMIC API TEXT NODES */}
+                    <Text style={styles.userName}>{userData?.name || 'Guest User'}</Text>
+                    <Text style={styles.userEmail}>{userData?.email || 'N/A'}</Text>
 
                     {/* Dynamic Membership Badge Row */}
                     <View style={[
@@ -135,8 +234,7 @@ const ProfileScreen = () => {
                     </View>
                 </View>
 
-
-                {/* Dynamic User Statistics Container Segment */}
+                {/* Statistics Container Segment */}
                 <View style={styles.statsRow}>
                     <View style={styles.statBox}>
                         <Text style={styles.statVal}>{orders.length}</Text>
@@ -144,7 +242,7 @@ const ProfileScreen = () => {
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.statBox}>
-                        <Text style={styles.statVal}>{cartCount}</Text>
+                        <Text style={styles.statVal}>{cartItems || 0}</Text>
                         <Text style={styles.statLabel}>In Cart</Text>
                     </View>
                     <View style={styles.statDivider} />
@@ -164,7 +262,7 @@ const ProfileScreen = () => {
                         >
                             <View style={styles.menuLeft}>
                                 <View style={styles.iconWrapper}>
-                                    <Ionicons name={option.icon} size={moderateScale(20)} color={colors.accentDark} />
+                                    <Ionicons name={option.icon} size={moderateScale(20)} color={colors.accentDark || '#4A154B'} />
                                 </View>
                                 <Text style={styles.menuLabel}>{option.label}</Text>
                             </View>
@@ -173,27 +271,13 @@ const ProfileScreen = () => {
                     ))}
                 </View>
 
-                {/* Account Termination Sign Out Control Trigger */}
-                <TouchableOpacity style={styles.logoutBtn} onPress={() => Alert.alert("Account", "Signing Out...")}>
+                {/* Sign Out Control Trigger */}
+                <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
                     <Ionicons name="log-out-outline" size={moderateScale(20)} color={colors.badge} style={{ marginRight: scale(8) }} />
                     <Text style={styles.logoutBtnText}>Sign Out</Text>
                 </TouchableOpacity>
-
-                {/* <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-                    <Text>Login</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => navigation.navigate("Register")}>
-                    <Text> Register</Text>
-                </TouchableOpacity> */}
             </ScrollView>
-
-      
-
-
         </SafeAreaView>
-
-        
     );
 };
 
@@ -203,6 +287,10 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#FFFFFF',
+    },
+    center: {
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     header: {
         flexDirection: 'row',
@@ -234,7 +322,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: verticalScale(24),
         borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        borderBottomColor: colors.border || '#F0F0F0',
     },
     avatarContainer: {
         position: 'relative',
@@ -249,11 +337,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 3,
         borderColor: '#ffffff',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: verticalScale(2) },
-        shadowOpacity: 0.1,
-        shadowRadius: moderateScale(4),
-        elevation: 3,
     },
     avatarLetters: {
         fontSize: moderateScale(28),
@@ -269,7 +352,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 0,
         right: 0,
-        backgroundColor: colors.accentDark,
+        backgroundColor: colors.accentDark || '#4A154B',
         width: moderateScale(24),
         height: moderateScale(24),
         borderRadius: moderateScale(12),
@@ -281,11 +364,11 @@ const styles = StyleSheet.create({
     userName: {
         fontSize: moderateScale(18),
         fontWeight: '800',
-        color: colors.text,
+        color: colors.text || '#000',
     },
     userEmail: {
         fontSize: moderateScale(13),
-        color: colors.textSecondary,
+        color: colors.textSecondary || '#666',
         marginTop: verticalScale(2),
         fontWeight: '500',
     },
@@ -303,17 +386,17 @@ const styles = StyleSheet.create({
     platinumBadge: {
         backgroundColor: '#f1f3f5',
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.border || '#F0F0F0',
     },
     membershipText: {
         fontSize: moderateScale(11),
         fontWeight: '700',
     },
     goldText: {
-        color: colors.accentDark,
+        color: colors.accentDark || '#4A154B',
     },
     platinumText: {
-        color: colors.text,
+        color: colors.text || '#000',
     },
     statsRow: {
         flexDirection: 'row',
@@ -321,7 +404,7 @@ const styles = StyleSheet.create({
         marginVertical: verticalScale(14),
         paddingVertical: verticalScale(16),
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.border || '#F0F0F0',
         borderRadius: moderateScale(12),
         marginHorizontal: scale(16),
         justifyContent: 'space-around',
@@ -334,24 +417,24 @@ const styles = StyleSheet.create({
     statVal: {
         fontSize: moderateScale(18),
         fontWeight: '900',
-        color: colors.text,
+        color: colors.text || '#000',
     },
     statLabel: {
         fontSize: moderateScale(11),
-        color: colors.textSecondary,
+        color: colors.textSecondary || '#666',
         fontWeight: '600',
         marginTop: verticalScale(4),
     },
     statDivider: {
         width: 1,
         height: verticalScale(30),
-        backgroundColor: colors.border,
+        backgroundColor: colors.border || '#F0F0F0',
     },
     menuContainer: {
         backgroundColor: '#ffffff',
         borderTopWidth: 1,
         borderBottomWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.border || '#F0F0F0',
         paddingHorizontal: scale(16),
     },
     menuItem: {
@@ -360,7 +443,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: verticalScale(14),
         borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        borderBottomColor: colors.border || '#F0F0F0',
     },
     menuLeft: {
         flexDirection: 'row',
@@ -378,7 +461,7 @@ const styles = StyleSheet.create({
     menuLabel: {
         fontSize: moderateScale(13.5),
         fontWeight: '600',
-        color: colors.text,
+        color: colors.text || '#000',
     },
     logoutBtn: {
         flexDirection: 'row',
@@ -390,10 +473,10 @@ const styles = StyleSheet.create({
         height: verticalScale(48),
         borderRadius: moderateScale(12),
         borderWidth: 1.5,
-        borderColor: colors.badge,
+        borderColor: colors.badge || '#ef4444',
     },
     logoutBtnText: {
-        color: colors.badge,
+        color: colors.badge || '#ef4444',
         fontSize: moderateScale(14.5),
         fontWeight: '800',
     },

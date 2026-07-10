@@ -1,121 +1,215 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   TextInput,
   StatusBar,
   ImageBackground,
-  FlatList,
   Modal,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ProductCard from '../component/ProductCard';
 import ProductCardSkeleton from '../component/ProductCardSkeleton';
 import { CategoryCard } from '../component/CategoryCard';
+import BestSellingCard from '../component/BestSellingCard';
 import MainHeader from '../component/MainHeader';
 import { scale, verticalScale, RESPONSIVE_PADDING, HORIZONTAL_PADDING } from '../utils/responsive';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useAppSelector } from '../store/hooks';
+import api from '../config/apiConfig';
+import { IMAGE_BASE_URL } from '../api/apiBaseUrl';
 
 const { width } = Dimensions.get('window');
 
-const HOME_BANNERS = [
-  { id: 1, image: 'https://loremflickr.com/400/300/fashion?lock=20', tag: 'NEW SEASON', title: 'Fashion that\nspeaks for you' },
-  { id: 2, image: 'https://loremflickr.com/400/300/fashion?lock=21', tag: 'SUMMER SALE', title: 'Up to 50%\noff selected items' },
-  { id: 3, image: 'https://loremflickr.com/400/300/fashion?lock=22', tag: 'EXCLUSIVE', title: 'Premium\nCollection' },
-];
 
-const categories = [
-  { id: 1, name: 'Women', image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=300&auto=format&fit=crop' },
-  { id: 2, name: 'Men', image: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=300&auto=format&fit=crop' },
-  { id: 3, name: 'Accessories', image: 'https://loremflickr.com/260/320/fashion?lock=7' },
-];
 
-const popularProducts = [
-  {
-    id: 1,
-    name: "Women's Dress",
-    price: '₹1,499',
-    oldPrice: '₹1,899',
-    discount: '20% OFF',
-    image: 'https://loremflickr.com/250/350/fashion?lock=1',
-    rating: 4.5,
-    reviews: 128,
-    inStock: true,
-  },
-  {
-    id: 2,
-    name: "Men's Shirt",
-    price: '₹999',
-    image: 'https://loremflickr.com/250/350/fashion?lock=2',
-    rating: 4,
-    reviews: 85,
-    inStock: true,
-  },
-  {
-    id: 3,
-    name: "Women's Saree",
-    price: '₹2,499',
-    image: 'https://loremflickr.com/250/350/fashion?lock=3',
-    rating: 5,
-    reviews: 256,
-    inStock: true,
-  },
-  {
-    id: 4,
-    name: "Men's T-Shirt",
-    price: '₹799',
-    oldPrice: '₹999',
-    discount: '20% OFF',
-    image: 'https://loremflickr.com/250/350/fashion?lock=4',
-    rating: 4.5,
-    reviews: 92,
-    inStock: true,
-  },
-];
+
+
 
 
 const HomeScreen = () => {
-  const [searchModalVisible, setSearchModalVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [apiCategories, setApiCategories] = useState<any[]>([]);
+  const [newArrivals, setNewArrivals] = useState<any[]>([]);
+  const [bestSelling, setBestSelling] = useState<any[]>([]);
+  const [sliders, setSliders] = useState<any[]>([]);
+  const [defaultAddress, setDefaultAddress] = useState<any>(null);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
+  const user = useAppSelector(state => state.auth.user);
+  const wishlistUpdateTrigger = useAppSelector(state => state.wishlist.wishlistUpdateTrigger);
 
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+  const bannerScrollRef = useRef<ScrollView>(null);
+  const bannerIndexRef = useRef(0);
 
   const handleBannerScroll = (event: any) => {
     const slide = Math.round(event.nativeEvent.contentOffset.x / event.nativeEvent.layoutMeasurement.width);
     if (slide !== activeBannerIndex) {
       setActiveBannerIndex(slide);
+      bannerIndexRef.current = slide;
     }
   };
 
-  React.useEffect(() => {
-    // Simulate real-time fetching
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, []);
+  // Auto-scroll banner every 3 seconds
+  useEffect(() => {
+    if (sliders.length < 2) return;
+    const timer = setInterval(() => {
+      const nextIndex = (bannerIndexRef.current + 1) % sliders.length;
+      bannerScrollRef.current?.scrollTo({ x: nextIndex * width, animated: true });
+      bannerIndexRef.current = nextIndex;
+      setActiveBannerIndex(nextIndex);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [sliders]);
 
+
+
+ 
+  // fetchAll — called on mount AND on pull-to-refresh
+  const fetchAll = useCallback(async (isPullRefresh = false) => {
+    if (!isPullRefresh) setIsLoading(true);
+    try {
+      const [categoriesRes, slidersRes, arrivalsRes, bestRes] = await Promise.all([
+        api.get('/categories'),
+        api.get('/sliders'),
+        api.get('/new-arrivals'),
+        api.get('/best-selling'),
+      ]);
+
+      if (categoriesRes.data?.status && Array.isArray(categoriesRes.data?.data)) {
+        setApiCategories(categoriesRes.data.data);
+      }
+      if (slidersRes.data?.status && slidersRes.data?.data) {
+        setSliders(slidersRes.data.data);
+      }
+      if (arrivalsRes.data?.status && arrivalsRes.data?.data) {
+        const mapped = arrivalsRes.data.data.map((variant: any) => {
+          const imageUrl = variant.thumbnail
+            ? (variant.thumbnail.startsWith('http') ? variant.thumbnail : `${IMAGE_BASE_URL}${variant.thumbnail}`)
+            : `https://loremflickr.com/250/350/fashion?lock=${variant.id}`;
+          return {
+            id: variant.id,
+            product_id: variant.product_id,
+            variant_id: variant.id,
+            color_id: variant.color_id ?? null,
+            size_id: variant.size_id ?? null,
+            name: variant.product?.name || 'Product',
+            image: imageUrl,
+            price: `₹${parseFloat(variant.discount_price || variant.price).toFixed(0)}`,
+            oldPrice: variant.discount_price ? `₹${parseFloat(variant.price).toFixed(0)}` : undefined,
+            discount: variant.discount_percentage ? `${variant.discount_percentage}% OFF` : undefined,
+            inStock: variant.stock > 0,
+            is_wishlisted: Number(variant.is_wishlisted) === 1,
+          };
+        });
+        setNewArrivals(mapped);
+      }
+      if (bestRes.data?.status && Array.isArray(bestRes.data?.data)) {
+        const mapped = bestRes.data.data.map((variant: any) => {
+          const imageUrl = variant.thumbnail
+            ? (variant.thumbnail.startsWith('http') ? variant.thumbnail : `${IMAGE_BASE_URL}${variant.thumbnail}`)
+            : `https://loremflickr.com/250/350/fashion?lock=${variant.id}`;
+          return {
+            id: variant.id,
+            product_id: variant.product_id,
+            variant_id: variant.id,
+            color_id: variant.color_id ?? null,
+            size_id: variant.size_id ?? null,
+            name: variant.product?.name || 'Product',
+            image: imageUrl,
+            price: `₹${parseFloat(variant.discount_price || variant.price).toFixed(0)}`,
+            oldPrice: variant.discount_price ? `₹${parseFloat(variant.price).toFixed(0)}` : undefined,
+            discount: variant.discount_percentage ? `${variant.discount_percentage}% OFF` : undefined,
+            inStock: variant.stock > 0,
+            is_wishlisted: Number(variant.is_wishlisted) === 1,
+          };
+        });
+        setBestSelling(mapped);
+      }
+    } catch (error) {
+      console.error('Error fetching home data:', error);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, [wishlistUpdateTrigger]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchAll(true);
+  }, [fetchAll]);
+
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isLoggedIn && user?.id) {
+        api.get(`/address?user_id=${user.id}`).then(res => {
+          if (res.data?.status && res.data?.data && res.data.data.length > 0) {
+            setDefaultAddress(res.data.data[0]);
+          } else {
+            setDefaultAddress(null);
+          }
+        }).catch(err => {
+          console.log('Error fetching address in home:', err);
+        });
+      } else {
+        setDefaultAddress(null);
+      }
+    }, [isLoggedIn, user])
+  );
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
+      
+      {isLoggedIn && defaultAddress && (
+        <Animated.View entering={FadeInDown.duration(400)} style={styles.addressBarContainer}>
+          <View style={styles.addressBarLeft}>
+            <Ionicons name="location-sharp" size={scale(16)} color="#000" />
+            <Text style={styles.addressBarName} numberOfLines={1}>{user?.name || defaultAddress.name}</Text>
+            <Text style={styles.addressBarText} numberOfLines={1}>
+               | {defaultAddress.address}, {defaultAddress.city} {defaultAddress.pincode}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('DeliveryAddress')}>
+            <Text style={styles.addressBarChangeText}>Change</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
-      <MainHeader onSearchPress={() => setSearchModalVisible(true)} />
+      <MainHeader onSearchPress={() => navigation.navigate('SearchScreen')} />
 
-      {/* Scrollable Content */}
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: verticalScale(20) }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#0A0A0A']}
+            tintColor="#0A0A0A"
+          />
+        }
+      >
 
         {/* Swipable Banner */}
         <View style={styles.bannerWrapper}>
           <ScrollView
+            ref={bannerScrollRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
@@ -123,33 +217,43 @@ const HomeScreen = () => {
             scrollEventThrottle={16}
             style={{ width }}
           >
-            {HOME_BANNERS.map((banner) => (
-              <View key={banner.id} style={{ width }}>
-                <ImageBackground
-                  source={{ uri: banner.image }}
-                  style={styles.banner}
-                  imageStyle={styles.bannerImage}
-                >
-                  <View style={styles.bannerOverlay}>
-                    <Text style={styles.bannerTag}>{banner.tag}</Text>
-                    <Text style={styles.bannerTitle}>{banner.title}</Text>
-                    <TouchableOpacity style={styles.shopButton}>
-                      <Text style={styles.shopButtonText}>Shop now</Text>
-                      <Ionicons name="arrow-forward" size={14} color="#FFF" />
-                    </TouchableOpacity>
-                  </View>
-                </ImageBackground>
-              </View>
-            ))}
+            {sliders.map((slider) => {
+              const imageUrl = slider.image?.startsWith('http')
+                ? slider.image
+                : `${IMAGE_BASE_URL}${slider.image}`;
+              return (
+                <View key={slider.id} style={{ width }}>
+                  <ImageBackground
+                    source={{ uri: imageUrl }}
+                    style={styles.banner}
+                    imageStyle={{ width: '100%', height: '100%', resizeMode: 'cover' }}
+                  >
+                    {(slider.title || slider.subtitle || slider.button_text) ? (
+                      <View style={styles.bannerOverlay}>
+                        {slider.title ? <Text style={styles.bannerTag}>{slider.title}</Text> : null}
+                        {slider.subtitle ? <Text style={styles.bannerTitle}>{slider.subtitle}</Text> : null}
+                        {slider.button_text ? (
+                          <TouchableOpacity style={styles.shopButton}>
+                            <Text style={styles.shopButtonText}>{slider.button_text}</Text>
+                            <Ionicons name="arrow-forward" size={14} color="#FFF" />
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                  </ImageBackground>
+                </View>
+              );
+            })}
           </ScrollView>
 
           <View style={styles.bannerDots}>
-            {HOME_BANNERS.map((_, index) => (
+            {sliders.map((_, dotIndex) => (
               <View
-                key={index}
+                key={dotIndex}
                 style={[
                   styles.dot,
-                  activeBannerIndex === index && styles.activeDot
+                  activeBannerIndex === dotIndex && { backgroundColor: '#000000', width: scale(18) }
                 ]}
               />
             ))}
@@ -169,100 +273,70 @@ const HomeScreen = () => {
             paddingRight: HORIZONTAL_PADDING,
           }}
         >
-          {categories.map(cat => (
+          {apiCategories.map(cat => (
             <CategoryCard
               key={cat.id}
               category={cat}
               onPress={() =>
                 navigation.navigate('ProductsTab', {
-                  categoryId: cat.id,
+                  mainCategoryId: cat.id,
                 })
               }
             />
           ))}
         </ScrollView>
 
-        {/* Trending */}
+        {/* New Arrivals */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Trending now</Text>
+          <Text style={styles.sectionTitle}>New Arrivals</Text>
           <TouchableOpacity>
             <Text style={styles.seeAll}>See all</Text>
           </TouchableOpacity>
         </View>
 
-        <FlatList
-          data={isLoading ? [1, 2, 3, 4] as any[] : popularProducts}
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          keyExtractor={item => (isLoading ? item.toString() : item.id.toString())}
           contentContainerStyle={{ paddingLeft: HORIZONTAL_PADDING, paddingRight: HORIZONTAL_PADDING }}
-          renderItem={({ item }) => (
-            isLoading ? <ProductCardSkeleton /> : <ProductCard item={item as any} onPress={() => console.log(item.name)} />
-          )}
-          scrollEventThrottle={16}
-          decelerationRate="fast"
-        />
-      </ScrollView>
-
-
-      <Modal
-        visible={searchModalVisible}
-        animationType="slide"
-        transparent={false}
-        statusBarTranslucent={true}
-      >
-        <View style={[styles.searchModalContainer, { paddingTop: Math.max(insets.top, verticalScale(12)) }]}>
-          <StatusBar backgroundColor="transparent" barStyle="dark-content" translucent={true} />
-
-          {/* Search Modal Header */}
-          <View style={styles.searchModalHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                setSearchModalVisible(false);
-                setSearchQuery('');
-              }}
-              style={styles.searchBackButton}
-            >
-              <Ionicons name="arrow-back" size={scale(24)} color="#0A0A0A" />
-            </TouchableOpacity>
-
-            <View style={styles.searchModalInputContainer}>
-              <Ionicons name="search-outline" size={scale(18)} color="#999" />
-              <TextInput
-                placeholder="Search fashion..."
-                placeholderTextColor="#AAA"
-                style={styles.searchModalInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoFocus
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={scale(18)} color="#999" />
-                </TouchableOpacity>
+        >
+          {(isLoading ? [1, 2, 3, 4] : newArrivals).map((item: any, index: number) => (
+            <View key={isLoading ? index : item.id}>
+              {isLoading ? (
+                <ProductCardSkeleton />
+              ) : (
+                <ProductCard item={item} onPress={() => console.log(item.name)} />
               )}
             </View>
-          </View>
+          ))}
+        </ScrollView>
 
-
-          {/* Search Results */}
-          <ScrollView style={styles.searchResultsContainer} showsVerticalScrollIndicator={false}>
-            {searchQuery.length === 0 ? (
-              <View style={styles.searchEmptyState}>
-                <Ionicons name="search-outline" size={scale(60)} color="#DDD" />
-                <Text style={styles.searchEmptyText}>Search for products</Text>
-              </View>
-            ) : (
-              <View style={styles.searchResultsContent}>
-                <Text style={styles.searchResultsTitle}>
-                  Results for "{searchQuery}"
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-
+        {/* Best Selling */}
+        <View style={[styles.sectionHeader, { marginTop: verticalScale(16) }]}>
+          <Text style={styles.sectionTitle}>Best Selling</Text>
+          <TouchableOpacity>
+            <Text style={styles.seeAll}>See all</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingLeft: HORIZONTAL_PADDING, paddingRight: HORIZONTAL_PADDING, paddingBottom: verticalScale(24) }}
+        >
+          {(isLoading ? [1, 2, 3, 4] : bestSelling).map((item: any, index: number) => (
+            <View key={isLoading ? index : item.id}>
+              {isLoading ? (
+                <View style={{ width: 280, marginRight: 12 }}>
+                  <ProductCardSkeleton />
+                </View>
+              ) : (
+                <BestSellingCard item={item} index={index} />
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      </ScrollView>
+
     </View>
   );
 };
@@ -274,195 +348,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
-
-
-  headerWrapper: {
-    backgroundColor: '#FFFFFF',
-    paddingBottom: verticalScale(16),
-    borderBottomLeftRadius: scale(24),
-    borderBottomRightRadius: scale(24),
-
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: HORIZONTAL_PADDING,
-  },
-
-  headerLeft: {
-    flex: 1,
-  },
-
-  greeting: {
-    fontSize: scale(12),
-    color: '#888',
-    marginBottom: 2,
-  },
-
-  brandName: {
-    fontSize: scale(28),
-    fontWeight: '800',
-    color: '#111',
-    letterSpacing: 2,
-  },
-
-  subTitle: {
-    fontSize: scale(12),
-    color: '#777',
-    marginTop: 2,
-  },
-
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  headerIcon: {
-    width: scale(42),
-    height: scale(42),
-    borderRadius: scale(21),
-    backgroundColor: '#F8F8F8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: scale(10),
-  },
-
-  notificationDot: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF3B30',
-  },
-
-  profileContainer: {
-    marginLeft: scale(12),
-  },
-
-  profileImage: {
-    width: scale(42),
-    height: scale(42),
-    borderRadius: scale(21),
-    borderWidth: 2,
-    borderColor: '#111',
-  },
-
-  searchBar: {
-    marginTop: verticalScale(18),
-    marginHorizontal: HORIZONTAL_PADDING,
-    backgroundColor: '#F6F6F6',
-    height: scale(52),
-    borderRadius: scale(16),
-
-    flexDirection: 'row',
-    alignItems: 'center',
-
-    paddingHorizontal: scale(16),
-
-    borderWidth: 1,
-    borderColor: '#ECECEC',
-  },
-
-  searchPlaceholder: {
-    marginLeft: scale(12),
-    color: '#999',
-    fontSize: scale(14),
-  },
   scrollContent: {
-    flex: 1,
+    flexGrow: 1,
   },
-
-
-  welcomeText: {
-    fontSize: scale(10),
-    color: '#999',
-    letterSpacing: 0.4,
-    fontWeight: '400',
-    marginBottom: verticalScale(2),
-  },
-
-  logoText: {
-    fontSize: scale(22),
-    fontWeight: '800',
-    color: '#0A0A0A',
-    letterSpacing: 2.2,
-  },
-
-  headerIcons: {
-    flexDirection: 'row',
-  },
-
-  iconButton: {
-    width: scale(38),
-    height: scale(38),
-    borderRadius: scale(19),
-    backgroundColor: '#F9F9F9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: scale(12),
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-  },
-
-  badgeDot: {
-    position: 'absolute',
-    top: scale(6),
-    right: scale(7),
-    width: scale(6),
-    height: scale(6),
-    borderRadius: scale(3),
-    backgroundColor: '#E84C3D',
-  },
-
-  avatarButton: {
-    width: scale(38),
-    height: scale(38),
-    borderRadius: scale(19),
-    marginLeft: scale(12),
-    borderWidth: 2,
-    borderColor: '#0A0A0A',
-    overflow: 'hidden',
-  },
-
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-
-
-  searchBarPlaceholder: {
-    flex: 1,
-    fontSize: scale(14),
-    color: '#AAA',
-    fontWeight: '400',
-  },
-
-  headerDivider: {
-    height: 0,
-    backgroundColor: 'transparent',
-    marginHorizontal: 0,
-    marginBottom: 0,
-  },
-
-  
   searchModalContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
     paddingTop: verticalScale(12)
   },
-
   searchModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -474,7 +367,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-
   searchBackButton: {
     width: scale(42),
     height: scale(42),
@@ -483,7 +375,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
   searchModalInputContainer: {
     flex: 1,
     flexDirection: 'row',
@@ -496,78 +387,77 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EFEFEF',
   },
-
   searchModalInput: {
     flex: 1,
     fontSize: scale(17),
     color: '#0A0A0A',
     fontWeight: '500',
   },
-
   searchResultsContainer: {
     flex: 1,
   },
-
   searchEmptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: verticalScale(60),
   },
-
   searchEmptyText: {
     fontSize: scale(16),
     color: '#AAA',
     fontWeight: '500',
     marginTop: verticalScale(16),
   },
-
   searchResultsContent: {
     padding: HORIZONTAL_PADDING,
   },
-
   searchResultsTitle: {
     fontSize: scale(16),
     fontWeight: '600',
     color: '#0A0A0A',
     marginBottom: verticalScale(16),
   },
-
   bannerWrapper: {
     position: 'relative',
   },
   banner: {
-    marginHorizontal: HORIZONTAL_PADDING,
-    height: scale(180),
-    borderRadius: scale(14),
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-    backgroundColor: '#0A0A0A',
-    marginBottom: verticalScale(24),
-    marginTop: verticalScale(8),
+    width: width,
+    height: scale(220),
+    backgroundColor: '#F0F0F0',
+    marginBottom: verticalScale(8),
   },
   bannerDots: {
     position: 'absolute',
-    bottom: verticalScale(10),
+    bottom: verticalScale(16),
+    left: 0,
+    right: 0,
     flexDirection: 'row',
-    alignSelf: 'center',
-    width: '100%',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   dot: {
-    width: scale(6),
-    height: scale(6),
-    borderRadius: scale(3),
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    width: scale(8),
+    height: scale(8),
+    borderRadius: scale(4),
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
     marginHorizontal: scale(4),
-  },
-  activeDot: {
-    backgroundColor: '#0A0A0A',
-    width: scale(16),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.4,
+    shadowRadius: 2,
+    elevation: 2,
   },
 
-  bannerImage: {
-    opacity: 0.5,
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: HORIZONTAL_PADDING,
+    justifyContent: 'space-between',
+    paddingBottom: verticalScale(24),
+  },
+  gridItem: {
+    width: '48%',
+    marginBottom: verticalScale(16),
   },
 
   bannerOverlay: {
@@ -742,4 +632,43 @@ const styles = StyleSheet.create({
     color: '#AAAAAA',
     textDecorationLine: 'line-through',
   },
+
+  addressBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: HORIZONTAL_PADDING,
+    paddingVertical: verticalScale(8),
+    backgroundColor: '#F5F9FF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E8F5',
+  },
+
+  addressBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: scale(10),
+  },
+
+  addressBarName: {
+    fontSize: scale(11),
+    fontWeight: '700',
+    color: '#111',
+    marginLeft: scale(4),
+    flexShrink: 0,
+  },
+
+  addressBarText: {
+    fontSize: scale(11),
+    color: '#555',
+    flex: 1,
+  },
+
+  addressBarChangeText: {
+    fontSize: scale(11),
+    fontWeight: '700',
+    color: '#007185',
+  },
 });
+

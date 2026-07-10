@@ -1,27 +1,84 @@
-import React from "react";
-import { StyleSheet, View, Text, FlatList, TouchableOpacity } from "react-native";
-import Header from "../component/Header";
+import React, { useEffect, useState, useCallback } from "react";
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, ToastAndroid, RefreshControl } from "react-native";
 import WishlistCard from "../component/WishlistCard";
 import { moderateScale, scale, verticalScale } from "../utils/responsive";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from "@react-navigation/native";
 import { useAppSelector, useAppDispatch } from "../store/hooks";
-import { removeFromWishlist } from "../store/slices/wishlistSlice";
-import { addToCart } from "../store/slices/cartSlice";
+import { removeFromWishlistAsync, fetchWishlistAsync } from "../store/slices/wishlistSlice";
+import { setCartCount } from '../store/slices/cartSlice';
+import api from "../config/apiConfig";
 
 const Wishlist = () => {
     const navigation = useNavigation<any>();
     const dispatch = useAppDispatch();
     const wishlistItems = useAppSelector(state => state.wishlist.items);
+    const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
+    const userId = useAppSelector(state => state.auth.userId);
+    const [refreshing, setRefreshing] = useState(false);
+    const [addingToCartId, setAddingToCartId] = useState<number | null>(null);
 
-    const handleRemove = (id: string | number) => {
-        dispatch(removeFromWishlist(id));
+    // Fetch server wishlist when screen loads (if logged in)
+    useEffect(() => {
+        if (isLoggedIn && userId) {
+            dispatch(fetchWishlistAsync() as any);
+        }
+    }, [isLoggedIn, userId]);
+
+    const onRefresh = useCallback(() => {
+        if (isLoggedIn && userId) {
+            setRefreshing(true);
+            dispatch(fetchWishlistAsync() as any).finally(() => setRefreshing(false));
+        }
+    }, [isLoggedIn, userId]);
+
+    const handleRemove = (item: any) => {
+        dispatch(removeFromWishlistAsync({
+            productId: item.product_id ?? item.id,
+            wishlistItemId: item.id,
+            variantId: item.variant_id ?? item.product_varient?.id ?? item.product?.id ?? item.id,
+        }) as any);
     };
 
-    const handleAddToCart = (item: any) => {
-        dispatch(addToCart({ id: item.id, product: item, quantity: 1 }));
-        navigation.navigate("MainTabs", { screen: "CartTab" });
+    const handleAddToCart = async (item: any) => {
+        const itemId = item.id;
+        setAddingToCartId(itemId);
+        try {
+            const response = await api.post('/cart/add', {
+                product_id: item.product_id ?? item.id,
+                variant_id: item.variant_id ?? null,
+                quantity: 1,
+                user_id: userId,
+            });
+            if (response.data.data?.cart_count !== undefined) {
+                dispatch(setCartCount(response.data.data.cart_count));
+            }
+            ToastAndroid.show("Added to cart", ToastAndroid.SHORT);
+            navigation.navigate("MainTabs", { screen: "CartTab" });
+        } catch (error) {
+            console.log('Add to cart API error:', error);
+        } finally {
+            setAddingToCartId(null);
+        }
     };
+
+
+    if (!isLoggedIn) {
+        return (
+            <View style={styles.container}>
+                <View style={styles.emptyContainer}>
+                    <View style={styles.emptyIconBg}>
+                        <Ionicons name="lock-closed-outline" size={scale(60)} color="#CCCCCC" />
+                    </View>
+                    <Text style={styles.emptyTitle}>Please Login</Text>
+                    <Text style={styles.emptySubtitle}>You need to be logged in to view your wishlist.</Text>
+                    <TouchableOpacity style={styles.shopBtn} onPress={() => navigation.navigate("Register")}>
+                        <Text style={styles.shopBtnText}>Login / Register</Text>
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -45,12 +102,20 @@ const Wishlist = () => {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.listContainer}
                     columnWrapperStyle={styles.columnWrapper}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={['#0A0A0A']}
+                            tintColor="#0A0A0A"
+                        />
+                    }
                     renderItem={({ item }) => (
-                        <WishlistCard 
-                            item={item} 
+                        <WishlistCard
+                            item={item}
                             onRemove={handleRemove}
                             onAddToCart={handleAddToCart}
-                            onPress={() => navigation.navigate("ProductDetails", { product: item })}
+                            isAddingToCart={addingToCartId === item.id}
                         />
                     )}
                 />

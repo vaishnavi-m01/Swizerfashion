@@ -6,17 +6,22 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
+  ToastAndroid,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialIcons from "react-native-vector-icons/MaterialIcons";
 import { scale, verticalScale, fontScale } from "../utils/responsive";
 import { useNavigation } from '@react-navigation/native';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { toggleWishlist } from '../store/slices/wishlistSlice';
-import { addToCart } from '../store/slices/cartSlice';
+import { setCartCount } from '../store/slices/cartSlice';
+import { addToWishlistAsync, removeFromWishlistAsync } from '../store/slices/wishlistSlice';
+import api from '../config/apiConfig';
 
 type Product = {
   id: number | string;
+  product_id?: number;
+  variant_id?: number;
+  product?: any;
   name: string;
   image: string;
   price: string;
@@ -25,6 +30,7 @@ type Product = {
   rating?: number;
   reviews?: number;
   inStock?: boolean;
+  is_wishlisted?: boolean
 };
 
 type Props = {
@@ -38,8 +44,15 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
   const wishlistItems = useAppSelector(state => state.wishlist.items);
-  
-  const isFavorite = wishlistItems.some(wishlistItem => wishlistItem.id === item.id);
+  const userId = useAppSelector(state => state.auth.userId);
+
+  const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
+
+  const isFavorite =
+    item.is_wishlisted ||
+    wishlistItems.some(
+      wishlistItem => wishlistItem.product_id === item.id || wishlistItem.id === item.id
+    );
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -55,8 +68,39 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
     }).start();
   };
 
+  //handleToggle
   const handleToggleFavorite = () => {
-    dispatch(toggleWishlist(item));
+    if (!isLoggedIn) {
+      navigation.navigate("Register");
+      return;
+    }
+
+    if (isFavorite) {
+      // 1. Find the current item saved inside the global Redux state list to get its metadata
+      const existingWishlistItem = wishlistItems.find(
+        (wishlistItem) => wishlistItem.product_id === item.id || wishlistItem.id === item.id
+      );
+
+      const removePayload = {
+        productId: targetId,
+        wishlistItemId: existingWishlistItem?.id,
+        variantId: variantId,
+      };
+
+      dispatch(removeFromWishlistAsync(removePayload) as any).then(() => {
+        ToastAndroid.show("Removed from wishlist", ToastAndroid.SHORT);
+      });
+    } else {
+      const addPayload = {
+        product_id: targetId,
+        variant_id: variantId,
+        product: item,
+      };
+
+      dispatch(addToWishlistAsync(addPayload) as any).then(() => {
+        ToastAndroid.show("Added to wishlist", ToastAndroid.SHORT);
+      });
+    }
   };
 
   const calculateDiscount = () => {
@@ -172,16 +216,41 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
               item.inStock === false && styles.addButtonDisabled,
             ]}
             // onPress={onPress}
-              onPress={() => {
-                dispatch(addToCart({ id: item.id, product: item, quantity: 1 }));
-                navigation.navigate("MainTabs", {
-                  screen: "CartTab",
-                  params: {
-                    id: 1,
-                  },
-                });
+            onPress={async () => {
+              if (!isLoggedIn) {
+                navigation.navigate('Register');
+                return;
               }
-            }
+
+              try {
+                const payload = {
+                  user_id: userId ?? 0,
+                  product_id: (item as any).product_id ?? null,
+                  variant_id: (item as any).id ?? (item as any).id ?? null,
+                  quantity: 1,
+                  size_id: (item as any).size_id ?? (item as any).size?.id ?? null,
+                  color_id: (item as any).color_id ?? (item as any).color?.id ?? null,
+                };
+
+                console.log('[Cart] POST /cart/add REQUEST:', JSON.stringify(payload, null, 2));
+                const response = await api.post('/cart/add', payload);
+                console.log('[Cart] POST /cart/add RESPONSE:', JSON.stringify(response.data, null, 2));
+
+                if (response.data.data?.cart_count !== undefined) {
+                    dispatch(setCartCount(response.data.data.cart_count));
+                }
+                ToastAndroid.show("Added to cart", ToastAndroid.SHORT);
+
+                navigation.navigate('MainTabs', {
+                  screen: 'CartTab',
+                });
+              } catch (error: any) {
+                console.log('[Cart] POST /cart/add ERROR:');
+                console.log('  Status :', error?.response?.status);
+                console.log('  Message:', error?.response?.data?.message);
+                console.log('  Errors :', JSON.stringify(error?.response?.data?.errors, null, 2));
+              }
+            }}
             disabled={item.inStock === false}
           >
             <Ionicons
