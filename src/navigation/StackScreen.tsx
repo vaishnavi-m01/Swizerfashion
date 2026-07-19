@@ -17,10 +17,13 @@ import Register from "../screen/Register";
 import ForgotPassword from "../screen/ForgotPassword";
 import RazorpayPaymentScreen from "../screen/RazorpayPaymentScreen";
 import SearchScreen from "../screen/SearchScreen";
-import SupportHelpScreen from "../screen/SupportHelpScreen";
 import PaymentMethodsScreen from "../screen/PaymentMethodsScreen";
 import NotificationPreferencesScreen from "../screen/NotificationPreferencesScreen";
-import PrivacySecurityScreen from "../screen/PrivacySecurityScreen";
+import ContactUsScreen from "../screen/ContactUsScreen";
+import ReturnPolicyScreen from "../screen/ReturnPolicyScreen";
+import PrivacyPolicyScreen from "../screen/PrivacyPolicyScreen";
+import TermsConditionsScreen from "../screen/TermsConditionsScreen";
+import EditProfileScreen from "../screen/EditProfileScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -51,10 +54,13 @@ export default function StackScreen() {
               DeliveryAddress: "Delivery Address",
               OrderDetails: "Order Details",
               ForgotPassword: "Forgot Password",
-              SupportHelpScreen: "Support & Help",
               PaymentMethodsScreen: "Payment Methods",
               NotificationPreferencesScreen: "Notifications",
-              PrivacySecurityScreen: "Privacy & Security",
+              ContactUsScreen: "Contact Us",
+              ReturnPolicyScreen: "Return Policy",
+              PrivacyPolicyScreen: "Privacy Policy",
+              TermsConditionsScreen: "Terms & Conditions",
+              EditProfileScreen: "Edit Profile",
             };
 
             return (
@@ -137,23 +143,38 @@ export default function StackScreen() {
           options={{ headerShown: false, animation: 'fade' }} />
 
           <Stack.Screen
-          name="SupportHelpScreen"
-          component={SupportHelpScreen}
-          options={{ headerShown: true }}/>
-
-          <Stack.Screen
           name="PaymentMethodsScreen"
           component={PaymentMethodsScreen}
           options={{ headerShown: true }}/>
 
-                   <Stack.Screen
+          <Stack.Screen
           name="NotificationPreferencesScreen"
           component={NotificationPreferencesScreen}
           options={{ headerShown: true }}/>
 
           <Stack.Screen
-          name="PrivacySecurityScreen"
-          component={PrivacySecurityScreen}
+          name="ContactUsScreen"
+          component={ContactUsScreen}
+          options={{ headerShown: true }}/>
+
+          <Stack.Screen
+          name="ReturnPolicyScreen"
+          component={ReturnPolicyScreen}
+          options={{ headerShown: true }}/>
+
+          <Stack.Screen
+          name="PrivacyPolicyScreen"
+          component={PrivacyPolicyScreen}
+          options={{ headerShown: true }}/>
+
+          <Stack.Screen
+          name="TermsConditionsScreen"
+          component={TermsConditionsScreen}
+          options={{ headerShown: true }}/>
+
+          <Stack.Screen
+          name="EditProfileScreen"
+          component={EditProfileScreen}
           options={{ headerShown: true }}/>
 
       </Stack.Navigator>

@@ -1,70 +1,74 @@
 import React, { useState } from 'react';
-import {
-    View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
-interface FAQItem {
-    question: string;
-    answer: string;
-}
-
-const FAQS: FAQItem[] = [
-    { question: 'How do I track my order?', answer: 'Go to My Orders, tap on your order and you\'ll see a live tracking status with shipping details.' },
-    { question: 'How do I return or replace an item?', answer: 'Open the Order Details page for the delivered item and tap "Return or Replace Items" to raise a request.' },
-    { question: 'When will I receive my refund?', answer: 'Refunds are processed within 5–7 business days after we receive the returned item.' },
-    { question: 'How can I change my delivery address?', answer: 'Go to Profile → Manage Shipping Address to add, edit or set a default address before placing an order.' },
-    { question: 'Can I cancel an order?', answer: 'Orders can be cancelled before they are shipped. Contact support if you need urgent assistance.' },
+const SUPPORT_MODULES = [
+    {
+        id: '1',
+        title: 'Contact Us',
+        content: 'Email: swizerfashion@gmail.com\nPhone: +91 89258 97502\nSupport Hours: Monday to Saturday, 10 AM to 7 PM IST'
+    },
+    {
+        id: '2',
+        title: 'Return & Exchange Policy',
+        content: 'Return Window: You have 7 days from the date of delivery to initiate a return request.\n\nMandatory Conditions: The product must have its original tags attached. Returns without tags will be strictly rejected. Only the exact product delivered to you is eligible for return.\n\nDispatch: Orders are typically dispatched within 48 hours of being placed.'
+    },
+    {
+        id: '3',
+        title: 'Privacy Policy',
+        content: 'Data Collection: Swizer collects personal information (name, email, shipping address, phone, payment details) and non-personal information (browser type, device info, site behavior) to process orders and improve user experience.\n\nData Usage: Information is used to fulfill orders, provide customer support, send personalized offers (with consent), and perform site analytics.\n\nSharing: Data is only shared with necessary logistics and payment partners, or to comply with legal requirements.'
+    },
+    {
+        id: '4',
+        title: 'Terms and Conditions',
+        content: 'Agreement: By using the website, you agree to their terms.\n\nIntellectual Property: All content (text, graphics, logos, images) is the property of the brand and protected by copyright.\n\nGoverning Law: The terms are governed by the laws of India, and disputes are subject to the exclusive jurisdiction of the courts in that location.'
+    }
 ];
 
 const SupportHelpScreen = () => {
-    const [expanded, setExpanded] = useState<number | null>(null);
+    const [activeSection, setActiveSection] = useState<string | null>(null);
 
-    const toggle = (i: number) => setExpanded(prev => (prev === i ? null : i));
+    const toggleSection = (id: string) => {
+        setActiveSection(prev => (prev === id ? null : id));
+    };
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+                <Text style={styles.headerTitle}>Support & Help Center</Text>
+                <Text style={styles.headerSubtitle}>How can we help you today?</Text>
 
-                {/* Contact Options */}
-                <Text style={styles.sectionLabel}>CONTACT US</Text>
-                <View style={styles.contactRow}>
-                    <TouchableOpacity style={styles.contactCard} onPress={() => Linking.openURL('mailto:support@swizerfashion.com')}>
-                        <Ionicons name="mail-outline" size={scale(24)} color="#111827" />
-                        <Text style={styles.contactTitle}>Email</Text>
-                        <Text style={styles.contactSub}>support@swizerfashion.com</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.contactCard} onPress={() => Linking.openURL('tel:+919999999999')}>
-                        <Ionicons name="call-outline" size={scale(24)} color="#111827" />
-                        <Text style={styles.contactTitle}>Phone</Text>
-                        <Text style={styles.contactSub}>+91 99999 99999</Text>
-                    </TouchableOpacity>
+                <View style={styles.accordionContainer}>
+                    {SUPPORT_MODULES.map((module) => {
+                        const isActive = activeSection === module.id;
+                        return (
+                            <View key={module.id} style={styles.moduleCard}>
+                                <TouchableOpacity 
+                                    style={styles.moduleHeader} 
+                                    onPress={() => toggleSection(module.id)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={[styles.moduleTitle, isActive && styles.activeTitle]}>
+                                        {module.title}
+                                    </Text>
+                                    <Ionicons 
+                                        name={isActive ? 'chevron-up' : 'chevron-down'} 
+                                        size={moderateScale(20)} 
+                                        color={isActive ? '#0A0A0A' : '#6B7280'} 
+                                    />
+                                </TouchableOpacity>
+                                
+                                {isActive && (
+                                    <View style={styles.moduleContent}>
+                                        <Text style={styles.bodyText}>{module.content}</Text>
+                                    </View>
+                                )}
+                            </View>
+                        );
+                    })}
                 </View>
-
-                {/* FAQ */}
-                <Text style={[styles.sectionLabel, { marginTop: verticalScale(24) }]}>FREQUENTLY ASKED</Text>
-                {FAQS.map((faq, i) => (
-                    <TouchableOpacity
-                        key={i}
-                        style={[styles.faqCard, expanded === i && styles.faqCardActive]}
-                        onPress={() => toggle(i)}
-                        activeOpacity={0.85}
-                    >
-                        <View style={styles.faqHeader}>
-                            <Text style={styles.faqQuestion}>{faq.question}</Text>
-                            <Ionicons
-                                name={expanded === i ? 'chevron-up' : 'chevron-down'}
-                                size={scale(16)}
-                                color="#9CA3AF"
-                            />
-                        </View>
-                        {expanded === i && (
-                            <Text style={styles.faqAnswer}>{faq.answer}</Text>
-                        )}
-                    </TouchableOpacity>
-                ))}
             </ScrollView>
         </SafeAreaView>
     );
@@ -73,39 +77,41 @@ const SupportHelpScreen = () => {
 export default SupportHelpScreen;
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F9FAFB' },
+    container: { flex: 1, backgroundColor: '#FAFAFA' },
     content: { padding: scale(16), paddingBottom: verticalScale(40) },
-    sectionLabel: {
-        fontSize: scale(11),
-        fontWeight: '700',
-        color: '#9CA3AF',
-        letterSpacing: 0.8,
-        marginBottom: verticalScale(10),
-        marginTop: verticalScale(4),
-    },
-    contactRow: { flexDirection: 'row', gap: scale(12) },
-    contactCard: {
-        flex: 1,
-        backgroundColor: '#FFFFFF',
-        borderRadius: moderateScale(14),
-        padding: moderateScale(16),
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#F0F0F0',
-        gap: verticalScale(6),
-    },
-    contactTitle: { fontSize: scale(13), fontWeight: '700', color: '#111827', marginTop: verticalScale(4) },
-    contactSub: { fontSize: scale(11), color: '#6B7280', textAlign: 'center' },
-    faqCard: {
+    headerTitle: { fontSize: moderateScale(24), fontWeight: '900', color: '#0A0A0A', marginBottom: verticalScale(8) },
+    headerSubtitle: { fontSize: moderateScale(14), color: '#6B7280', marginBottom: verticalScale(24) },
+    accordionContainer: { gap: verticalScale(12) },
+    moduleCard: {
         backgroundColor: '#FFFFFF',
         borderRadius: moderateScale(12),
-        padding: moderateScale(14),
-        marginBottom: verticalScale(8),
         borderWidth: 1,
-        borderColor: '#F0F0F0',
+        borderColor: '#E5E7EB',
+        overflow: 'hidden',
     },
-    faqCardActive: { borderColor: '#111827' },
-    faqHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: scale(8) },
-    faqQuestion: { flex: 1, fontSize: scale(13), fontWeight: '600', color: '#111827', lineHeight: scale(19) },
-    faqAnswer: { fontSize: scale(13), color: '#6B7280', marginTop: verticalScale(10), lineHeight: scale(20) },
+    moduleHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: scale(16),
+        backgroundColor: '#FFFFFF',
+    },
+    moduleTitle: {
+        fontSize: moderateScale(16),
+        fontWeight: '700',
+        color: '#374151',
+    },
+    activeTitle: {
+        color: '#0A0A0A',
+    },
+    moduleContent: {
+        paddingHorizontal: scale(16),
+        paddingBottom: scale(16),
+        backgroundColor: '#FFFFFF',
+    },
+    bodyText: { 
+        fontSize: moderateScale(14), 
+        color: '#4B5563', 
+        lineHeight: moderateScale(22) 
+    },
 });

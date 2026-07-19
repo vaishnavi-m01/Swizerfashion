@@ -21,21 +21,7 @@ const Header = ({ title }: props) => {
 
       <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
 
-      {/* <View style={{ flexDirection: "row", gap: scale(6) }}>
-                        <TouchableOpacity
-                            style={styles.headerBtn}
-                            onPress={() => setInWishlist(!inWishlist)}
-                        >
-                            <Ionicons name={inWishlist ? "heart" : "heart-outline"} size={moderateScale(22)} color={inWishlist ? "#E84C3D" : "#0A0A0A"} />
-                        </TouchableOpacity>
-    
-                        <TouchableOpacity
-                            style={styles.headerBtn}
-                            onPress={handleShare}
-                        >
-                            <Entypo name="share" color="#000" size={moderateScale(21)} />
-                        </TouchableOpacity>
-                    </View> */}
+   
     </View>
   )
 }

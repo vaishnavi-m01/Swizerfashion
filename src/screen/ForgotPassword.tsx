@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import OtpVerify from 'react-native-otp-verify';
+import SmsRetriever from 'react-native-sms-retriever';
 import api from '../config/apiConfig';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import { colors } from '../theme/Colors';
@@ -32,35 +32,54 @@ const ForgotPassword = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isFocused, setIsFocused] = useState<string | null>(null);
-  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const otpInputRef = useRef<TextInput>(null);
 
   // SMS auto-read OTP
   useEffect(() => {
-      if (step === 'otp') {
-          OtpVerify.getOtp().then(() => OtpVerify.addListener((message: string) => {
-              const match = message && message.match(/(\d{4,6})/);
-              if (match) {
-                  setOtp(match[1]);
-              }
-          })).catch((err: any) => console.log('SMS OTP error:', err));
+    const startSmsListener = async () => {
+        if (Platform.OS === 'android') {
+            try {
+                const registered = await SmsRetriever.startSmsRetriever();
+                if (registered) {
+                    SmsRetriever.addSmsListener((event: any) => {
+                        if (event && event.message) {
+                            const match = event.message.match(/(\d{4,6})/);
+                            if (match && match[1]) {
+                                setOtp(match[1]);
+                                SmsRetriever.removeSmsListener();
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.log('SmsRetriever error:', error);
+            }
+        }
+    };
 
-          return () => {
-              OtpVerify.removeListener();
-          };
-      }
+    if (step === 'otp') {
+        startSmsListener();
+    }
+
+    return () => {
+        if (Platform.OS === 'android') {
+            SmsRetriever.removeSmsListener();
+        }
+    };
   }, [step]);
 
+  
   const handleSendOtp = async () => {
-    const newErrors: {[key: string]: string} = {};
+    const newErrors: { [key: string]: string } = {};
     if (!mobile) newErrors.mobile = 'Mobile Number is required';
     else if (mobile.length < 10) newErrors.mobile = 'Please enter a valid 10-digit mobile number';
     if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        return;
+      setErrors(newErrors);
+      return;
     }
     setErrors({});
-    
+
     setOtp('');
 
     try {
@@ -76,12 +95,12 @@ const ForgotPassword = () => {
   };
 
   const handleVerifyOtp = async () => {
-    const newErrors: {[key: string]: string} = {};
+    const newErrors: { [key: string]: string } = {};
     if (!otp) newErrors.otp = 'OTP is required';
     else if (otp.length < 6) newErrors.otp = 'Please enter a valid 6-digit OTP code';
     if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        return;
+      setErrors(newErrors);
+      return;
     }
     setErrors({});
 
@@ -98,15 +117,15 @@ const ForgotPassword = () => {
   };
 
   const handleResetPassword = async () => {
-    const newErrors: {[key: string]: string} = {};
+    const newErrors: { [key: string]: string } = {};
     if (!password) newErrors.password = 'New Password is required';
     else if (password.length < 4) newErrors.password = 'Password must be at least 4 characters';
     if (!confirmPassword) newErrors.confirmPassword = 'Confirm Password is required';
     else if (password !== confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
 
     if (Object.keys(newErrors).length > 0) {
-        setErrors(newErrors);
-        return;
+      setErrors(newErrors);
+      return;
     }
     setErrors({});
 
@@ -149,7 +168,7 @@ const ForgotPassword = () => {
             <Text style={styles.progressLabel}>Mobile</Text>
           </View>
           <View style={[styles.progressLine, (step === 'otp' || step === 'password') && styles.progressLineActive]} />
-          
+
           <View style={styles.progressItem}>
             <View style={[styles.stepCircle, (step === 'otp' || step === 'password') && styles.stepActive]}>
               <Text style={(step === 'otp' || step === 'password') ? styles.stepTextActive : styles.stepTextInactive}>2</Text>
@@ -157,7 +176,7 @@ const ForgotPassword = () => {
             <Text style={styles.progressLabel}>Verify</Text>
           </View>
           <View style={[styles.progressLine, step === 'password' && styles.progressLineActive]} />
-          
+
           <View style={styles.progressItem}>
             <View style={[styles.stepCircle, step === 'password' && styles.stepActive]}>
               <Text style={step === 'password' ? styles.stepTextActive : styles.stepTextInactive}>3</Text>
@@ -172,7 +191,7 @@ const ForgotPassword = () => {
             <View>
               <Text style={styles.title}>Forgot Password?</Text>
               <Text style={styles.subtitle}>Enter your phone number below. We will send an OTP verification pin to verify your profile.</Text>
-              
+
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Mobile Number <Text style={styles.requiredStar}>*</Text></Text>
                 <View style={[styles.inputWrapper, isFocused === 'mobile' && styles.inputWrapperFocused, errors.mobile ? styles.inputError : null]}>
@@ -183,8 +202,8 @@ const ForgotPassword = () => {
                     placeholderTextColor={colors.textMuted || '#999'}
                     value={mobile}
                     onChangeText={(text) => {
-                        setMobile(text);
-                        if (errors.mobile) setErrors({...errors, mobile: ''});
+                      setMobile(text);
+                      if (errors.mobile) setErrors({ ...errors, mobile: '' });
                     }}
                     keyboardType="phone-pad"
                     maxLength={10}
@@ -204,45 +223,45 @@ const ForgotPassword = () => {
             <View>
               <Text style={styles.title}>Verification Code</Text>
               <Text style={styles.subtitle}>Please enter the 6-digit verification security key sent to <Text style={styles.boldText}>+91 {mobile}</Text></Text>
-              
+
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Enter Code <Text style={styles.requiredStar}>*</Text></Text>
                 <View style={{ position: 'relative' }}>
-                    <View style={styles.otpContainer}>
-                        {Array(6).fill(0).map((_, i) => (
-                            <View key={i} style={[
-                                styles.otpBox, 
-                                isFocused === 'otp' && otp.length === i ? styles.otpBoxActive : null,
-                                errors.otp ? styles.inputError : null
-                            ]}>
-                                <Text style={styles.otpText}>{otp[i] || ''}</Text>
-                            </View>
-                        ))}
-                    </View>
-                    <TextInput
-                        ref={otpInputRef}
-                        value={otp}
-                        onChangeText={(text) => {
-                            const val = text.replace(/[^0-9]/g, '').slice(0, 6);
-                            setOtp(val);
-                            if (errors.otp) setErrors({...errors, otp: ''});
-                        }}
-                        keyboardType="number-pad"
-                        maxLength={6}
-                        style={styles.hiddenInput}
-                        onFocus={() => setIsFocused('otp')}
-                        onBlur={() => setIsFocused(null)}
-                        textContentType="oneTimeCode"
-                        autoComplete="sms-otp"
-                        importantForAutofill="yes"
-                    />
+                  <View style={styles.otpContainer}>
+                    {Array(6).fill(0).map((_, i) => (
+                      <View key={i} style={[
+                        styles.otpBox,
+                        isFocused === 'otp' && otp.length === i ? styles.otpBoxActive : null,
+                        errors.otp ? styles.inputError : null
+                      ]}>
+                        <Text style={styles.otpText}>{otp[i] || ''}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <TextInput
+                    ref={otpInputRef}
+                    value={otp}
+                    onChangeText={(text) => {
+                      const val = text.replace(/[^0-9]/g, '').slice(0, 6);
+                      setOtp(val);
+                      if (errors.otp) setErrors({ ...errors, otp: '' });
+                    }}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    style={styles.hiddenInput}
+                    onFocus={() => setIsFocused('otp')}
+                    onBlur={() => setIsFocused(null)}
+                    textContentType="oneTimeCode"
+                    autoComplete="sms-otp"
+                    importantForAutofill="yes"
+                  />
                 </View>
                 {errors.otp ? <Text style={styles.errorText}>{errors.otp}</Text> : null}
               </View>
               <TouchableOpacity style={styles.primaryBtn} onPress={handleVerifyOtp} disabled={loading}>
                 {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Verify OTP Code</Text>}
               </TouchableOpacity>
-              
+
               <View style={styles.resendRow}>
                 <Text style={styles.resendInfo}>Didn't receive code? </Text>
                 <TouchableOpacity onPress={handleSendOtp} disabled={loading}>
@@ -267,8 +286,8 @@ const ForgotPassword = () => {
                     placeholderTextColor={colors.textMuted || '#999'}
                     value={password}
                     onChangeText={(text) => {
-                        setPassword(text);
-                        if (errors.password) setErrors({...errors, password: ''});
+                      setPassword(text);
+                      if (errors.password) setErrors({ ...errors, password: '' });
                     }}
                     secureTextEntry={!showPassword}
                     maxLength={32}
@@ -292,8 +311,8 @@ const ForgotPassword = () => {
                     placeholderTextColor={colors.textMuted || '#999'}
                     value={confirmPassword}
                     onChangeText={(text) => {
-                        setConfirmPassword(text);
-                        if (errors.confirmPassword) setErrors({...errors, confirmPassword: ''});
+                      setConfirmPassword(text);
+                      if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: '' });
                     }}
                     secureTextEntry={!showConfirmPassword}
                     maxLength={32}

@@ -562,7 +562,7 @@
 //         paddingHorizontal: scale(16), paddingTop: verticalScale(12), paddingBottom: verticalScale(14),
 //         borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
 //     },
-//     headerTitle: { fontSize: scale(22), fontWeight: '800', color: '#0A0A0A' },
+//     headerTitle: { fontSize: moderateScale(18), fontWeight: '900', color: '#0A0A0A' },
 //     headerSubtitle: { fontSize: scale(12), color: '#9CA3AF', fontWeight: '400', marginTop: verticalScale(2) },
 //     iconButton: {
 //         width: scale(40), height: scale(40), borderRadius: scale(20),
@@ -591,7 +591,7 @@
 // });
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, ScrollView, ActivityIndicator, RefreshControl, Modal } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -599,6 +599,7 @@ import { scale, verticalScale, moderateScale } from '../utils/responsive';
 import OrderCard from '../component/OrderCards';
 import api from '../config/apiConfig';
 import { colors } from '../theme/Colors';
+import { useAppSelector } from '../store/hooks';
 
 const IMAGE_BASE_URL = "https://webbitech.in/gama/swizer/";
 
@@ -607,7 +608,9 @@ const STATUS_FILTERS = ['All', 'Delivered', 'Cancelled'];
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; icon: string }> = {
     Pending: { bg: '#FEF3C7', color: '#D97706', icon: 'time-outline' },
-    Shipped: { bg: '#DBEAFE', color: '#2563EB', icon: 'cube-outline' },
+    Confirmed: { bg: '#DBEAFE', color: '#2563EB', icon: 'checkmark-circle' },
+    Processing: { bg: '#E0F2FE', color: '#0284C7', icon: 'sync-outline' },
+    Shipped: { bg: '#EDE9FE', color: '#7C3AED', icon: 'cube-outline' },
     Delivered: { bg: '#DCFCE7', color: '#16A34A', icon: 'checkmark-circle-outline' },
     Cancelled: { bg: '#FEE2E2', color: '#DC2626', icon: 'close-circle-outline' },
     All: { bg: '#EEF2FF', color: '#4F46E5', icon: 'list-outline' },
@@ -618,18 +621,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; icon: string }> 
 // "confirmed") fell through to "Pending", which is why every order was showing as Pending.
 const normalizeStatus = (status: string) => {
     if (!status) return "Pending";
-    const s = status.toLowerCase().trim();
-
-    if (s === "delivered") return "Delivered";
-    if (s === "cancelled" || s === "canceled") return "Cancelled";
-    if (s === "shipped" || s === "out_for_delivery" || s === "out for delivery") return "Shipped";
-    if (s === "confirmed" || s === "processing" || s === "pending") return "Pending";
-    if (s === "return" || s === "returned") return "Returned";
-
-    // Fallback for any unexpected value from the API — log it so it's easy to spot
-    // instead of it silently pretending to be "Pending".
-    console.warn("[OrderScreen] Unrecognized order_status from API:", status);
-    return "Pending";
+    return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
 // Bucket created_at into Today / Week / Month / Year for the pill filter
@@ -690,15 +682,19 @@ const mapOrder = (order: any) => {
 
 const OrderScreen = () => {
     const navigation = useNavigation<any>();
+    const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
+    const wishlistItems = useAppSelector(state => state.wishlist.items);
     const [activeTime, setActiveTime] = useState('Today');
     const [activeStatus, setActiveStatus] = useState('All');
+    const [staffModalVisible, setStaffModalVisible] = useState(false);
 
     const [orders, setOrders] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const fetchOrders = useCallback(async () => {
+        if (!isLoggedIn) return;
         try {
             setError(null);
 
@@ -754,6 +750,15 @@ const OrderScreen = () => {
         });
     }, [orders, activeStatus]);
 
+    const orderCounts = useMemo(() => {
+        const counts: Record<string, number> = { All: orders.length, Delivered: 0, Cancelled: 0 };
+        orders.forEach(order => {
+            if (order.orderStatus === 'Delivered') counts.Delivered++;
+            if (order.orderStatus === 'Cancelled') counts.Cancelled++;
+        });
+        return counts;
+    }, [orders]);
+
 
 
 
@@ -785,16 +790,60 @@ const OrderScreen = () => {
         });
     };
 
+    // Not logged in state — show login prompt
+    if (!isLoggedIn) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top']}>
+                <View style={styles.header}>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.headerTitle}>My Orders</Text>
+                        <Text style={styles.headerSubtitle}>Track all your purchases</Text>
+                    </View>
+                    <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={styles.headerIcon}
+                        onPress={() => navigation.navigate('Wishlist')}
+                    >
+                        <Ionicons name="heart-outline" size={scale(20)} color="#1A1A1A" />
+                        {wishlistItems.length > 0 && <View style={styles.notificationDot} />}
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.emptyState}>
+                    <View style={styles.guestIconWrap}>
+                        <Ionicons name="bag-handle-outline" size={scale(52)} color="#0A0A0A" />
+                    </View>
+                    <Text style={styles.guestTitle}>Place your first order!</Text>
+                    <Text style={styles.guestSubtitle}>
+                        Login to view your order history, track deliveries, and more.
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.loginBtn}
+                        onPress={() => navigation.navigate('Login')}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons name="log-in-outline" size={scale(18)} color="#FFF" style={{ marginRight: scale(8) }} />
+                        <Text style={styles.loginBtnText}>Login / Sign Up</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
             <View style={styles.header}>
-                <View>
+                <View style={{ flex: 1 }}>
                     <Text style={styles.headerTitle}>My Orders</Text>
                     <Text style={styles.headerSubtitle}>{orders.length} total orders</Text>
                 </View>
-                <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('SearchScreen')}>
-                    <Ionicons name="search-outline" size={scale(22)} color="#0A0A0A" />
+                <TouchableOpacity
+                    activeOpacity={0.7}
+                    style={styles.headerIcon}
+                    onPress={() => navigation.navigate('Wishlist')}
+                >
+                    <Ionicons name="heart-outline" size={scale(20)} color="#1A1A1A" />
+                    {wishlistItems.length > 0 && <View style={styles.notificationDot} />}
                 </TouchableOpacity>
             </View>
 
@@ -815,23 +864,19 @@ const OrderScreen = () => {
                     ))}
                 </View>
 
-                {/* Status chips: flex 1 to distribute space evenly */}
                 <View style={styles.statusRow}>
                     {STATUS_FILTERS.map((status) => {
-                        const sty = STATUS_STYLE[status];
+                        const sty = STATUS_STYLE[status] || STATUS_STYLE.All;
                         const isActive = activeStatus === status;
+                        const count = orderCounts[status] || 0;
                         return (
                             <TouchableOpacity
                                 key={status}
                                 style={[
                                     styles.statusChip,
                                     {
-                                        backgroundColor: isActive ? '#FFFFFF' : 'transparent',
-                                        shadowColor: isActive ? '#000' : 'transparent',
-                                        shadowOffset: { width: 0, height: 2 },
-                                        shadowOpacity: isActive ? 0.05 : 0,
-                                        shadowRadius: 3,
-                                        elevation: isActive ? 2 : 0,
+                                        backgroundColor: isActive ? sty.bg : '#F9F9F9',
+                                        borderColor: isActive ? sty.color : '#EFEFEF',
                                     }
                                 ]}
                                 onPress={() => setActiveStatus(status)}
@@ -840,13 +885,13 @@ const OrderScreen = () => {
                                 <Ionicons
                                     name={sty.icon as any}
                                     size={scale(13)}
-                                    color={isActive ? sty.color : '#888'}
+                                    color={isActive ? sty.color : '#B0B0B0'}
                                 />
                                 <Text style={[
                                     styles.statusChipText,
-                                    { color: isActive ? sty.color : '#888', fontWeight: (isActive ? '700' : '500') as '700' | '500' }
+                                    { color: isActive ? sty.color : '#B0B0B0', fontWeight: (isActive ? '700' : '500') as '700' | '500' }
                                 ]}>
-                                    {status}
+                                    {status} ({count})
                                 </Text>
                             </TouchableOpacity>
                         );
@@ -858,7 +903,7 @@ const OrderScreen = () => {
             {/* Body */}
             {loading ? (
                 <View style={styles.emptyState}>
-                    <ActivityIndicator size="large" color="#4F46E5" />
+                    <ActivityIndicator size="large" color="#0A0A0A" />
                     <Text style={styles.emptySubtitle}>Loading your orders…</Text>
                 </View>
             ) : error ? (
@@ -872,9 +917,19 @@ const OrderScreen = () => {
                 </View>
             ) : filteredOrders.length === 0 ? (
                 <View style={styles.emptyState}>
-                    <Ionicons name="receipt-outline" size={scale(60)} color="#D1D5DB" />
-                    <Text style={styles.emptyTitle}>No orders found</Text>
-                    <Text style={styles.emptySubtitle}>Try changing your filters</Text>
+                    <View style={styles.guestIconWrap}>
+                        <Ionicons name="receipt-outline" size={scale(52)} color="#0A0A0A" />
+                    </View>
+                    <Text style={styles.guestTitle}>No orders yet</Text>
+                    <Text style={styles.guestSubtitle}>Shop from our collection and your orders will appear here.</Text>
+                    <TouchableOpacity
+                        style={styles.loginBtn}
+                        onPress={() => navigation.navigate('HomeTab')}
+                        activeOpacity={0.85}
+                    >
+                        <Ionicons name="storefront-outline" size={scale(18)} color="#FFF" style={{ marginRight: scale(8) }} />
+                        <Text style={styles.loginBtnText}>Start Shopping</Text>
+                    </TouchableOpacity>
                 </View>
             ) : (
                 <FlatList
@@ -891,10 +946,30 @@ const OrderScreen = () => {
                             price={item.price}
                             date={item.date}
                             onPress={() => goToOrderDetails(item)}
+                            onAssignStaff={() => setStaffModalVisible(true)}
                         />
                     )}
                 />
             )}
+
+            <Modal visible={staffModalVisible} transparent animationType="slide" onRequestClose={() => setStaffModalVisible(false)}>
+                <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setStaffModalVisible(false)}>
+                    <View style={styles.modalContainer}>
+                        <Text style={styles.modalTitle}>Select Staff</Text>
+                        <ScrollView>
+                            {['Ramesh', 'Suresh', 'Karthik', 'Vijay'].map((staff, idx) => (
+                                <TouchableOpacity key={idx} style={styles.staffItem} onPress={() => setStaffModalVisible(false)}>
+                                    <Ionicons name="person-circle-outline" size={scale(24)} color="#4B5563" />
+                                    <Text style={styles.staffName}>{staff}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                        <TouchableOpacity style={styles.cancelBtn} onPress={() => setStaffModalVisible(false)}>
+                            <Text style={styles.cancelBtnText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -904,12 +979,38 @@ export default OrderScreen;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#FFFFFF' },
     header: {
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: scale(16), paddingTop: verticalScale(12), paddingBottom: verticalScale(14),
-        borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: scale(16),
+        paddingVertical: verticalScale(14),
+        backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#EFEFEF',
     },
-    headerTitle: { fontSize: scale(22), fontWeight: '800', color: '#0A0A0A' },
-    headerSubtitle: { fontSize: scale(12), color: '#9CA3AF', fontWeight: '400', marginTop: verticalScale(2) },
+    headerTitle: { fontSize: moderateScale(18), fontWeight: '900', color: '#0A0A0A' },
+    headerSubtitle: { fontSize: moderateScale(13), fontWeight: '600', color: '#0A0A0A', marginTop: verticalScale(2) },
+    headerIcon: {
+        width: scale(40),
+        height: scale(40),
+        borderRadius: scale(20),
+        backgroundColor: '#F8F9FA',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#EFEFEF',
+    },
+    notificationDot: {
+        position: 'absolute',
+        top: scale(11),
+        right: scale(11),
+        width: scale(7),
+        height: scale(7),
+        borderRadius: scale(3.5),
+        backgroundColor: '#FF3B30',
+        borderWidth: 1.5,
+        borderColor: '#FFFFFF',
+    },
     iconButton: {
         width: scale(40), height: scale(40), borderRadius: scale(20),
         backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center',
@@ -934,4 +1035,17 @@ const styles = StyleSheet.create({
     emptySubtitle: { fontSize: scale(13), color: '#9CA3AF', marginTop: verticalScale(6), textAlign: 'center' },
     retryButton: { marginTop: verticalScale(16), backgroundColor: colors.accent, paddingHorizontal: scale(20), paddingVertical: verticalScale(10), borderRadius: moderateScale(10) },
     retryButtonText: { color: '#FFF', fontWeight: '700', fontSize: scale(13) },
+    // Guest / login prompt styles
+    guestIconWrap: { width: scale(100), height: scale(100), borderRadius: scale(50), backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center', marginBottom: verticalScale(20) },
+    guestTitle: { fontSize: moderateScale(22), fontWeight: '800', color: '#0A0A0A', textAlign: 'center', marginBottom: verticalScale(8) },
+    guestSubtitle: { fontSize: moderateScale(14), color: '#6B7280', textAlign: 'center', lineHeight: moderateScale(22), marginBottom: verticalScale(28), paddingHorizontal: scale(8) },
+    loginBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0A0A0A', borderRadius: moderateScale(12), paddingHorizontal: scale(28), paddingVertical: verticalScale(14) },
+    loginBtnText: { color: '#FFF', fontWeight: '800', fontSize: moderateScale(15) },
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContainer: { backgroundColor: '#FFF', borderTopLeftRadius: moderateScale(16), borderTopRightRadius: moderateScale(16), padding: scale(16), maxHeight: verticalScale(350) },
+    modalTitle: { fontSize: moderateScale(18), fontWeight: '800', color: '#000', marginBottom: verticalScale(12), textAlign: 'center' },
+    staffItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: verticalScale(12), borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+    staffName: { fontSize: moderateScale(16), color: '#374151', marginLeft: scale(12) },
+    cancelBtn: { marginTop: verticalScale(16), backgroundColor: '#F3F4F6', paddingVertical: verticalScale(12), borderRadius: moderateScale(8), alignItems: 'center' },
+    cancelBtnText: { color: '#000', fontWeight: '600', fontSize: moderateScale(14) },
 });

@@ -21,17 +21,11 @@ import MainHeader from '../component/MainHeader';
 import { scale, verticalScale, RESPONSIVE_PADDING, HORIZONTAL_PADDING } from '../utils/responsive';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useAppSelector } from '../store/hooks';
 import api from '../config/apiConfig';
 import { IMAGE_BASE_URL } from '../api/apiBaseUrl';
 
 const { width } = Dimensions.get('window');
-
-
-
-
-
 
 
 const HomeScreen = () => {
@@ -46,7 +40,6 @@ const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
   const user = useAppSelector(state => state.auth.user);
-  const wishlistUpdateTrigger = useAppSelector(state => state.wishlist.wishlistUpdateTrigger);
 
   const [activeBannerIndex, setActiveBannerIndex] = useState(0);
   const bannerScrollRef = useRef<ScrollView>(null);
@@ -142,8 +135,9 @@ const HomeScreen = () => {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, [wishlistUpdateTrigger]);
+  }, []);
 
+  
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
@@ -175,23 +169,8 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
-      
-      {isLoggedIn && defaultAddress && (
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.addressBarContainer}>
-          <View style={styles.addressBarLeft}>
-            <Ionicons name="location-sharp" size={scale(16)} color="#000" />
-            <Text style={styles.addressBarName} numberOfLines={1}>{user?.name || defaultAddress.name}</Text>
-            <Text style={styles.addressBarText} numberOfLines={1}>
-               | {defaultAddress.address}, {defaultAddress.city} {defaultAddress.pincode}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={() => navigation.navigate('DeliveryAddress')}>
-            <Text style={styles.addressBarChangeText}>Change</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      )}
 
-      <MainHeader onSearchPress={() => navigation.navigate('SearchScreen')} />
+      <MainHeader onSearchPress={() => navigation.navigate('SearchScreen')} showAddress={true} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -463,6 +442,7 @@ const styles = StyleSheet.create({
   bannerOverlay: {
     padding: RESPONSIVE_PADDING.lg,
     paddingBottom: RESPONSIVE_PADDING.xl,
+    flex: 1,
   },
 
   bannerTag: {
@@ -489,7 +469,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: RESPONSIVE_PADDING.lg,
     paddingVertical: verticalScale(10),
     borderRadius: scale(22),
-    alignSelf: 'flex-start',
+    position: 'absolute',
+    bottom: RESPONSIVE_PADDING.xl,
+    right: RESPONSIVE_PADDING.lg,
   },
 
   shopButtonText: {

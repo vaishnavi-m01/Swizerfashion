@@ -1,5 +1,17 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, Dimensions, ActivityIndicator, RefreshControl } from "react-native";
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import {
+    StyleSheet,
+    View,
+    Text,
+    TouchableOpacity,
+    ScrollView,
+    TextInput,
+    Dimensions,
+    ActivityIndicator,
+    RefreshControl,
+    Animated,
+    Easing
+} from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
@@ -16,27 +28,89 @@ const CartScreen = () => {
     const insets = useSafeAreaInsets();
     const dispatch = useAppDispatch();
     const userId = useAppSelector(state => state.auth.userId);
+    const wishlistItems = useAppSelector(state => state.wishlist.items);
 
     const [cartItems, setCartItems] = useState<any[]>([]);
-    const [summary, setSummary] = useState<any>(null); 
+    const [summary, setSummary] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [summaryLoading, setSummaryLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [isCheckingOut, setIsCheckingOut] = useState(false);
 
-    console.log("CartScreen Summary",summary)
-    useFocusEffect(
-        useCallback(() => {
+    // Pull values safely from API response
+    const subtotal = summary?.subtotal ?? 0;
+    const gst = summary?.gst ?? 0;
+    const deliveryFee = summary?.shipping ?? 0;
+    const shippingLabel = summary?.shipping_label;
+    const grandTotal = summary?.total ?? 0;
+    const selectedItems = cartItems.filter(item => item.selected);
+    console.log("selectedItemsCart", selectedItems);
+
+    // Derived condition for free delivery animation
+    const isFreeDelivery = deliveryFee === 0 && subtotal > 0;
+
+    // ─── ANIMATION SETUP ───────────────────────────────────────────
+    const shimmerAnim = useRef(new Animated.Value(-1)).current;
+    const truckAnim = useRef(new Animated.Value(-100)).current;
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    // Shimmer Loop
+    useEffect(() => {
+        const shimmerLoop = Animated.loop(
+            Animated.timing(shimmerAnim, {
+                toValue: 2,
+                duration: 2000,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            })
+        );
+        shimmerLoop.start();
+        return () => shimmerLoop.stop();
+    }, [shimmerAnim]);
+
+    const shimmerTranslate = shimmerAnim.interpolate({
+        inputRange: [-1, 2],
+        outputRange: [-width * 0.6, width * 0.6],
+    });
+
+    // Free Delivery Banner Animations
+    useEffect(() => {
+        if (isFreeDelivery) {
+            Animated.sequence([
+                Animated.timing(truckAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+                Animated.loop(
+                    Animated.sequence([
+                        Animated.timing(pulseAnim, { toValue: 1.04, duration: 700, useNativeDriver: true }),
+                        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+                    ])
+                ),
+            ]).start();
+        } else {
+            truckAnim.setValue(-100);
+            pulseAnim.setValue(1);
+        }
+    }, [isFreeDelivery, truckAnim, pulseAnim]);
+
+
+    console.log("CartScreen Summary", summary);
+
+   useFocusEffect(
+    React.useCallback(() => {
+        if (userId) {
             getCart();
-        }, [])
-    );
+        } else {
+            setCartItems([]);
+            setSummary(null);
+            dispatch(setCartCount(0));
+        }
+    }, [userId])
+);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         getCart();
     }, []);
 
-    // 1. Initial Fetch Cart
     const getCart = async () => {
         try {
             setLoading(true);
@@ -60,12 +134,9 @@ const CartScreen = () => {
         }
     };
 
-    // 2. Fetch Summary Whenever Selection Changes
     const updateSummaryFromBackend = async (currentItems: any[]) => {
         try {
             setSummaryLoading(true);
-            
-            // Extracting only selected cart item IDs
             const selectedIds = currentItems
                 .filter(item => item.selected)
                 .map(item => item.id);
@@ -75,7 +146,6 @@ const CartScreen = () => {
                 return;
             }
 
-            // Calling backend to fetch updated summary for selected items
             const response = await api.post('/cart/summary', { cart_ids: selectedIds, user_id: userId });
             if (response.data.status) {
                 setSummary(response.data.data.summary);
@@ -105,8 +175,6 @@ const CartScreen = () => {
                 quantity,
                 user_id: userId,
             });
-            
-            // Instantly updating locally for UI smoothness, then full refresh
             setCartItems(prev => prev.map(item => item.id === id ? { ...item, quantity } : item));
             getCart();
         } catch (error) {
@@ -114,35 +182,30 @@ const CartScreen = () => {
         }
     };
 
-    // 3. Toggle Selection (Calls API to fetch new order summary)
     const handleToggleSelect = (id: number) => {
-        const updatedItems = cartItems.map(item => 
+        const updatedItems = cartItems.map(item =>
             item.id === id ? { ...item, selected: !item.selected } : item
         );
-        
         setCartItems(updatedItems);
-        // Request backend to re-calculate summary for these selected items
         updateSummaryFromBackend(updatedItems);
     };
-
-    // Values pulled directly from API response
-    const subtotal = summary?.subtotal ?? 0;
-    const gst = summary?.gst ?? 0;
-    const deliveryFee = summary?.shipping ?? 0;
-    const shippingLabel = summary?.shipping_label ?? (deliveryFee === 0 ? 'Free' : `₹${deliveryFee}`);
-    const grandTotal = summary?.total ?? 0;
-
-    const selectedItems = cartItems.filter(item => item.selected);
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Cart</Text>
-                {cartItems.length > 0 && (
+                <View style={{ flex: 1 }}>
+                    <Text style={styles.headerTitle}>Shopping Bag</Text>
                     <Text style={styles.headerCount}>{cartItems.length} Items</Text>
-                )}
+                </View>
+                <TouchableOpacity 
+                    activeOpacity={0.7} 
+                    style={styles.headerIcon} 
+                    onPress={() => navigation.navigate("Wishlist")}
+                >
+                    <Ionicons name="heart-outline" size={scale(20)} color="#1A1A1A" />
+                    {wishlistItems.length > 0 && <View style={styles.notificationDot} />}
+                </TouchableOpacity>
             </View>
-
             {loading && cartItems.length === 0 ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#0A0A0A" />
@@ -153,25 +216,35 @@ const CartScreen = () => {
                     <Ionicons name="cart-outline" size={scale(80)} color="#EFEFEF" />
                     <Text style={styles.emptyTitle}>Your Cart is Empty</Text>
                     <Text style={styles.emptySubtitle}>Looks like you haven't added anything to your cart yet.</Text>
-                    <TouchableOpacity style={styles.shopBtn} onPress={() => navigation.navigate('HomeTab')}>
+                    <TouchableOpacity style={styles.shopBtn} onPress={() => navigation.navigate('MainTabs', { screen: 'ProductsTab' })}>
                         <Text style={styles.shopBtnText}>Start Shopping</Text>
                     </TouchableOpacity>
                 </View>
             ) : (
                 <>
                     <ScrollView
-                    style={styles.mainWrapper}
-                    contentContainerStyle={styles.itemList}
-                    showsVerticalScrollIndicator={false}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            colors={['#0A0A0A']}
-                            tintColor="#0A0A0A"
-                        />
-                    }
-                >
+                        style={styles.mainWrapper}
+                        contentContainerStyle={styles.itemList}
+                        showsVerticalScrollIndicator={false}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={refreshing}
+                                onRefresh={onRefresh}
+                                colors={['#0A0A0A']}
+                                tintColor="#0A0A0A"
+                            />
+                        }
+                    >
+                        {/* Free Delivery Animated Notice (Optional implementation using your truckAnim/pulseAnim variables) */}
+                        {isFreeDelivery && (
+                            <Animated.View style={[styles.freeDeliveryBanner, { transform: [{ scale: pulseAnim }] }]}>
+                                <Animated.View style={{ transform: [{ translateX: truckAnim }] }}>
+                                    <Ionicons name="bicycle-outline" size={20} color="#16A34A" />
+                                </Animated.View>
+                                <Text style={styles.freeDeliveryText}>Yay! You get Free Delivery on this order 🎉</Text>
+                            </Animated.View>
+                        )}
+
                         {cartItems.map((item: any) => (
                             <CartItem
                                 key={item.id}
@@ -179,7 +252,6 @@ const CartScreen = () => {
                                 onRemove={handleRemove}
                                 onUpdateQuantity={handleUpdateQuantity}
                                 onToggleSelect={handleToggleSelect}
-                                // onPress={() => navigation.navigate('ProductDetails', { product: item.product })}
                             />
                         ))}
 
@@ -196,13 +268,13 @@ const CartScreen = () => {
                             </TouchableOpacity>
                         </View>
 
-                        {/* Order Summary Card from API */}
+                        {/* Order Summary Card */}
                         <View style={styles.summaryCard}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: verticalScale(12) }}>
                                 <Text style={styles.summaryTitle}>Order Summary</Text>
                                 {summaryLoading && <ActivityIndicator size="small" color="#0A0A0A" />}
                             </View>
-                            
+
                             <View style={styles.summaryRow}>
                                 <Text style={styles.summaryLabel}>Subtotal</Text>
                                 <Text style={styles.summaryVal}>₹{Number(subtotal).toFixed(2)}</Text>
@@ -227,30 +299,41 @@ const CartScreen = () => {
                         </View>
                     </ScrollView>
 
-                    {/* Footer Row */}
-                    <View style={[styles.footer, { paddingBottom: insets.bottom > 0 ? insets.bottom : verticalScale(16) }]}>
+                    {/* Footer Row with Animated Checkout Shimmer */}
+                    <View style={[styles.footer,]}>
                         <View style={styles.footerPriceCol}>
                             <Text style={styles.footerPriceLabel}>Total Price</Text>
                             <Text style={styles.footerPriceVal}>₹{Number(grandTotal).toFixed(0)}</Text>
                         </View>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[
                                 styles.checkoutBtn,
                                 (selectedItems.length === 0 || summaryLoading || isCheckingOut) && styles.disabledBtn
-                            ]} 
+                            ]}
                             disabled={selectedItems.length === 0 || summaryLoading || isCheckingOut}
                             onPress={async () => {
                                 setIsCheckingOut(true);
                                 try {
-                                    navigation.navigate("CheckOutScreen", { selectedItems });
+                                    // navigation.navigate("CheckOutScreen", { selectedItems });
+                                    navigation.navigate("CheckOutScreen", {
+                                        selectedItems,
+                                        summary,
+                                    });
                                 } finally {
                                     setIsCheckingOut(false);
                                 }
                             }}
                         >
-                            {isCheckingOut ? (
+                            <Animated.View
+                                style={[
+                                    styles.payNowShimmer,
+                                    { transform: [{ translateX: shimmerTranslate }, { skewX: '-20deg' }] },
+                                ]}
+                                pointerEvents="none"
+                            />
+                            {isCheckingOut && (
                                 <ActivityIndicator size="small" color="#fff" />
-                            ) : null}
+                            )}
                             <Text style={[styles.checkoutBtnText, isCheckingOut && { marginLeft: 6 }]}>
                                 {isCheckingOut ? 'Processing...' : 'Checkout'}
                             </Text>
@@ -263,7 +346,6 @@ const CartScreen = () => {
 };
 
 export default CartScreen;
-
 
 const styles = StyleSheet.create({
     container: {
@@ -290,12 +372,47 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#0A0A0A',
     },
+    headerIcon: {
+        width: scale(40),
+        height: scale(40),
+        borderRadius: scale(20),
+        backgroundColor: '#F8F9FA', 
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#EFEFEF',
+    },
+    notificationDot: {
+        position: 'absolute',
+        top: scale(11),
+        right: scale(11),
+        width: scale(7),
+        height: scale(7),
+        borderRadius: scale(3.5),
+        backgroundColor: '#FF3B30', 
+        borderWidth: 1.5,
+        borderColor: '#FFFFFF', 
+    },
     mainWrapper: {
         flex: 1,
     },
     itemList: {
         padding: moderateScale(16),
         paddingBottom: verticalScale(40),
+    },
+    freeDeliveryBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F0FDF4',
+        padding: moderateScale(10),
+        borderRadius: moderateScale(8),
+        marginBottom: verticalScale(12),
+        gap: scale(8)
+    },
+    freeDeliveryText: {
+        color: '#16A34A',
+        fontWeight: '600',
+        fontSize: moderateScale(12.5)
     },
     promoCard: {
         flexDirection: 'row',
@@ -338,7 +455,6 @@ const styles = StyleSheet.create({
         fontSize: moderateScale(14),
         fontWeight: '800',
         color: '#0A0A0A',
-        marginBottom: verticalScale(12),
     },
     summaryRow: {
         flexDirection: 'row',
@@ -399,6 +515,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        overflow: 'hidden'
     },
     disabledBtn: {
         backgroundColor: '#A3A3A3',
@@ -453,5 +570,11 @@ const styles = StyleSheet.create({
     freeLabel: {
         color: '#16A34A',
         fontWeight: '700',
+    },
+    payNowShimmer: {
+        position: 'absolute',
+        width: '50%',
+        height: '100%',
+        backgroundColor: 'rgba(255,255,255,0.15)'
     },
 });

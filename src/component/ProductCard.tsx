@@ -48,11 +48,26 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
 
   const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
 
-  const isFavorite =
-    item.is_wishlisted ||
-    wishlistItems.some(
-      wishlistItem => wishlistItem.product_id === item.id || wishlistItem.id === item.id
-    );
+  const isWishlistLoaded = useAppSelector(state => state.wishlist.isLoaded);
+  const addedVariantIds = useAppSelector(state => state.wishlist.addedVariantIds);
+  const removedVariantIds = useAppSelector(state => state.wishlist.removedVariantIds);
+
+  const currentVariantId = (item as any).variant_id ?? item.id;
+  
+  const apiWishlisted = item.is_wishlisted === "1" || item.is_wishlisted === 1 || item.is_wishlisted === true;
+
+  const isFavorite = addedVariantIds.includes(currentVariantId)
+    ? true
+    : removedVariantIds.includes(currentVariantId)
+      ? false
+      : (isWishlistLoaded 
+          ? wishlistItems.some(
+              w => 
+                String(w.variant_id) === String(currentVariantId) ||
+                String(w.product_id) === String((item as any).product_id ?? item.id) ||
+                String(w.id) === String(item.id)
+            ) || apiWishlisted
+          : apiWishlisted);
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -74,6 +89,9 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
       navigation.navigate("Register");
       return;
     }
+
+    const targetId = (item as any).product_id ?? (item.id as number);
+    const variantId = (item as any).variant_id ?? undefined;
 
     if (isFavorite) {
       // 1. Find the current item saved inside the global Redux state list to get its metadata
@@ -129,7 +147,7 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
       <TouchableOpacity
         style={[styles.productCard, isGrid && styles.productCardGrid]}
         // onPress={onPress}
-        onPress={() => navigation.navigate("ProductDetails", { product: item })}
+        onPress={() => navigation.push("ProductDetails", { product: item })}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         activeOpacity={0.9}
@@ -145,17 +163,12 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
           {(item.discount || discountPercent) && (
             <View style={styles.discountBadge}>
               <Text style={styles.discountText}>
-                {item.discount || `${discountPercent}% OFF`}
+                {item.discount || ""}
               </Text>
             </View>
           )}
 
-          {/* Stock Status */}
-          {item.inStock === false && (
-            <View style={styles.outOfStockOverlay}>
-              <Text style={styles.outOfStockText}>Out of Stock</Text>
-            </View>
-          )}
+          {/* Stock Status removed from card, shown only in details and cart */}
 
           {/* Favorite Button */}
           <TouchableOpacity
@@ -211,10 +224,7 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
 
           {/* Add to Cart Button */}
           <TouchableOpacity
-            style={[
-              styles.addButton,
-              item.inStock === false && styles.addButtonDisabled,
-            ]}
+            style={styles.addButton}
             // onPress={onPress}
             onPress={async () => {
               if (!isLoggedIn) {
@@ -251,7 +261,6 @@ const ProductCard: React.FC<Props> = ({ item, onPress, isGrid = false }) => {
                 console.log('  Errors :', JSON.stringify(error?.response?.data?.errors, null, 2));
               }
             }}
-            disabled={item.inStock === false}
           >
             <Ionicons
               name="bag-add-outline"

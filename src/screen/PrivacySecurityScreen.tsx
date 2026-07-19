@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
 import { scale, verticalScale, moderateScale } from '../utils/responsive';
 
 interface SecurityItem {
@@ -22,6 +23,7 @@ const SECURITY_SETTINGS: SecurityItem[] = [
 ];
 
 const PrivacySecurityScreen = () => {
+    const navigation = useNavigation<any>();
     const [enabled, setEnabled] = useState<Record<string, boolean>>({
         faceId: true,
         twoFactor: false,

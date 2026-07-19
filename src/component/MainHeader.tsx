@@ -1,23 +1,54 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Image, Platform, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { scale, verticalScale, HORIZONTAL_PADDING } from '../utils/responsive';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAppSelector } from '../store/hooks';
+import api from '../config/apiConfig';
 
 const logo = require('../asset/images/logo.png');
 
 interface Props {
   title?: string; 
   onSearchPress?: () => void;
+  showAddress?: boolean;
+  hideCartIcon?: boolean;
+  hideWishlistIcon?: boolean;
 }
 
-const MainHeader: React.FC<Props> = ({ onSearchPress }) => {
+const MainHeader: React.FC<Props> = ({ 
+  onSearchPress, 
+  showAddress = false, 
+  hideCartIcon = false, 
+  hideWishlistIcon = false 
+}) => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const cartCount = useAppSelector(state => state.cart.cartCount);
   const wishlistItems = useAppSelector(state => state.wishlist.items);
+  
+  const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
+  const user = useAppSelector(state => state.auth.user);
+  const [defaultAddress, setDefaultAddress] = useState<any>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (showAddress && isLoggedIn && user?.id) {
+        api.get(`/address?user_id=${user.id}`).then(res => {
+          if (res.data?.status && res.data?.data && res.data.data.length > 0) {
+            setDefaultAddress(res.data.data[0]);
+          } else {
+            setDefaultAddress(null);
+          }
+        }).catch(err => {
+          console.log('Error fetching address in MainHeader:', err);
+        });
+      } else {
+        setDefaultAddress(null);
+      }
+    }, [isLoggedIn, user, showAddress])
+  );
 
   return (
     <View
@@ -29,9 +60,25 @@ const MainHeader: React.FC<Props> = ({ onSearchPress }) => {
       ]}
     >
       <View style={styles.headerContainer}>
-        {/* Left Section: Logo */}
+        {/* Left Section: Logo or Address */}
         <View style={styles.headerLeft}>
-          <Image source={logo} style={styles.logoImage} resizeMode="contain" />
+          {showAddress && defaultAddress ? (
+            <TouchableOpacity 
+                activeOpacity={0.8} 
+                onPress={() => navigation.navigate('DeliveryAddress')}
+                style={styles.addressContainer}
+            >
+                <View style={styles.addressTopRow}>
+                    <Text style={styles.addressTypeText}>{defaultAddress.type || 'Other'}</Text>
+                    <Ionicons name="chevron-down" size={scale(16)} color="#0A0A0A" style={styles.addressIcon} />
+                </View>
+                <Text style={styles.addressText} numberOfLines={1}>
+                    {defaultAddress.address}, {defaultAddress.city}, {defaultAddress.pincode}
+                </Text>
+            </TouchableOpacity>
+          ) : (
+            <Image source={logo} style={styles.logoImage} resizeMode="contain" />
+          )}
         </View>
 
         {/* Right Section: Action Buttons */}
@@ -39,33 +86,36 @@ const MainHeader: React.FC<Props> = ({ onSearchPress }) => {
           <TouchableOpacity 
             activeOpacity={0.7} 
             style={styles.headerIcon} 
-            onPress={onSearchPress}
+            onPress={onSearchPress || (() => navigation.navigate('SearchScreen'))}
           >
             <Ionicons name="search-outline" size={scale(20)} color="#1A1A1A" />
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            style={styles.headerIcon} 
-            onPress={() => navigation.navigate("Wishlist")}
-          >
-            <Ionicons name="heart-outline" size={scale(20)} color="#1A1A1A" />
-            {wishlistItems.length > 0 && <View style={styles.notificationDot} />}
-          </TouchableOpacity>
+          {!hideWishlistIcon && (
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              style={styles.headerIcon} 
+              onPress={() => navigation.navigate("Wishlist")}
+            >
+              <Ionicons name="heart-outline" size={scale(20)} color="#1A1A1A" />
+              {wishlistItems.length > 0 && <View style={styles.notificationDot} />}
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity 
-            activeOpacity={0.7} 
-            style={styles.headerIcon} 
-            onPress={() => navigation.navigate("CartTab")}
-          >
-            {/* <Ionicons name="bag-handle-outline" size={scale(20)} color="#1A1A1A" /> */}
-            <Ionicons name="cart-outline" color="#1A1A1A" size={24} />
-            {cartCount > 0 && (
-              <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>{cartCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          {!hideCartIcon && (
+            <TouchableOpacity 
+              activeOpacity={0.7} 
+              style={styles.headerIcon} 
+              onPress={() => navigation.navigate("CartTab")}
+            >
+              <Ionicons name="cart-outline" color="#1A1A1A" size={24} />
+              {cartCount > 0 && (
+                <View style={styles.badgeContainer}>
+                  <Text style={styles.badgeText}>{cartCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
@@ -77,7 +127,6 @@ export default MainHeader;
 const styles = StyleSheet.create({
   headerWrapper: {
     backgroundColor: '#FFFFFF',
-    // Ultra-subtle, premium bottom border instead of harsh rounded corners
     borderBottomWidth: 1,
     borderBottomColor: '#F2F2F7', 
     zIndex: 100,
@@ -94,7 +143,7 @@ const styles = StyleSheet.create({
     }),
   },
   headerContainer: {
-    height: verticalScale(56), // Fixed content height for UI consistency
+    height: verticalScale(56), 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -103,6 +152,7 @@ const styles = StyleSheet.create({
   headerLeft: {
     justifyContent: 'center',
     alignItems: 'flex-start',
+    flex: 1,
   },
   logoImage: {
     width: scale(105),
@@ -116,11 +166,10 @@ const styles = StyleSheet.create({
     width: scale(40),
     height: scale(40),
     borderRadius: scale(20),
-    backgroundColor: '#F8F9FA', // Cleaner, brighter gray
+    backgroundColor: '#F8F9FA', 
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: scale(12),
-    // Subtle border for the button to make it pop over backgrounds
     borderWidth: 1,
     borderColor: '#EFEFEF',
   },
@@ -150,8 +199,31 @@ const styles = StyleSheet.create({
     width: scale(7),
     height: scale(7),
     borderRadius: scale(3.5),
-    backgroundColor: '#FF3B30', // Apple System Red
+    backgroundColor: '#FF3B30', 
     borderWidth: 1.5,
-    borderColor: '#FFFFFF', // Creates a sharp cutout mask look
+    borderColor: '#FFFFFF', 
+  },
+  addressContainer: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+  },
+  addressTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addressTypeText: {
+    fontSize: scale(16),
+    fontWeight: '800',
+    color: '#0A0A0A',
+  },
+  addressIcon: {
+    marginLeft: scale(4),
+    marginTop: scale(2),
+  },
+  addressText: {
+    fontSize: scale(12),
+    color: '#555',
+    marginTop: scale(2),
+    maxWidth: scale(180),
   },
 });

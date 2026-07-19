@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, FlatList, TouchableOpacity, ToastAndroid, Refre
 import WishlistCard from "../component/WishlistCard";
 import { moderateScale, scale, verticalScale } from "../utils/responsive";
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useAppSelector, useAppDispatch } from "../store/hooks";
 import { removeFromWishlistAsync, fetchWishlistAsync } from "../store/slices/wishlistSlice";
 import { setCartCount } from '../store/slices/cartSlice';
@@ -19,11 +19,13 @@ const Wishlist = () => {
     const [addingToCartId, setAddingToCartId] = useState<number | null>(null);
 
     // Fetch server wishlist when screen loads (if logged in)
-    useEffect(() => {
-        if (isLoggedIn && userId) {
-            dispatch(fetchWishlistAsync() as any);
-        }
-    }, [isLoggedIn, userId]);
+    useFocusEffect(
+        React.useCallback(() => {
+            if (isLoggedIn && userId) {
+                dispatch(fetchWishlistAsync() as any);
+            }
+        }, [isLoggedIn, userId])
+    );
 
     const onRefresh = useCallback(() => {
         if (isLoggedIn && userId) {
@@ -90,7 +92,7 @@ const Wishlist = () => {
                     </View>
                     <Text style={styles.emptyTitle}>No Favorites Yet</Text>
                     <Text style={styles.emptySubtitle}>Tap the heart on any product to save it to your wishlist.</Text>
-                    <TouchableOpacity style={styles.shopBtn} onPress={() => navigation.navigate("HomeTab")}>
+                    <TouchableOpacity style={styles.shopBtn} onPress={() => navigation.navigate("MainTabs", { screen: "ProductsTab" })}>
                         <Text style={styles.shopBtnText}>Explore Products</Text>
                     </TouchableOpacity>
                 </View>

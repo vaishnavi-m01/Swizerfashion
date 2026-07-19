@@ -18,7 +18,7 @@ import { useAppDispatch } from '../store/hooks';
 import { login } from '../store/slices/authSlice';
 import { saveAuthState } from '../utils/storage';
 import { Alert, ActivityIndicator, ToastAndroid } from 'react-native';
-import OtpVerify from 'react-native-otp-verify';
+import SmsRetriever from 'react-native-sms-retriever';
 
 const logo = require('../asset/images/logo.png');
 
@@ -44,7 +44,7 @@ const Register = () => {
 
     // Timer countdown
     useEffect(() => {
-        let interval: NodeJS.Timeout;
+        let interval: ReturnType<typeof setInterval>;
         if (timer > 0) {
             interval = setInterval(() => {
                 setTimer(prev => prev - 1);
@@ -55,19 +55,36 @@ const Register = () => {
 
     // SMS auto-read OTP
     useEffect(() => {
-        if (isOtpSent) {
-            OtpVerify.getOtp().then((p: any) => OtpVerify.addListener((message: string) => {
-                // Extract OTP from message (6-digit number)
-                const match = message && message.match(/(\d{4,6})/);
-                if (match) {
-                    setOtp(match[1]);
+        const startSmsListener = async () => {
+            if (Platform.OS === 'android') {
+                try {
+                    const registered = await SmsRetriever.startSmsRetriever();
+                    if (registered) {
+                        SmsRetriever.addSmsListener((event: any) => {
+                            if (event && event.message) {
+                                const match = event.message.match(/(\d{4,6})/);
+                                if (match && match[1]) {
+                                    setOtp(match[1]);
+                                    SmsRetriever.removeSmsListener();
+                                }
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.log('SmsRetriever error:', error);
                 }
-            })).catch((err: any) => console.log('SMS OTP error:', err));
+            }
+        };
 
-            return () => {
-                OtpVerify.removeListener();
-            };
+        if (isOtpSent) {
+            startSmsListener();
         }
+
+        return () => {
+            if (Platform.OS === 'android') {
+                SmsRetriever.removeSmsListener();
+            }
+        };
     }, [isOtpSent]);
 
     const handleRegister = async () => {
@@ -454,11 +471,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderRadius: moderateScale(20),
         padding: moderateScale(24),
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#EFEFEF',
     },
     title: {
         fontSize: scale(22),

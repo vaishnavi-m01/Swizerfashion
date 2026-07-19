@@ -31,11 +31,24 @@ const BestSellingCard: React.FC<Props> = ({ item, index }) => {
   const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
   const wishlistItems = useAppSelector(state => state.wishlist.items);
 
-  const isFavorite =
-    (item as any).is_wishlisted ||
-    wishlistItems.some(
-      wishlistItem => wishlistItem.product_id === item.id || wishlistItem.id === item.id
-    );
+  const isWishlistLoaded = useAppSelector(state => state.wishlist.isLoaded);
+  const addedVariantIds = useAppSelector(state => state.wishlist.addedVariantIds);
+  const removedVariantIds = useAppSelector(state => state.wishlist.removedVariantIds);
+
+  const currentVariantId = (item as any).variant_id ?? item.id;
+
+  const isFavorite = addedVariantIds.includes(currentVariantId)
+    ? true
+    : removedVariantIds.includes(currentVariantId)
+      ? false
+      : (isWishlistLoaded 
+          ? wishlistItems.some(
+              w => 
+                String(w.variant_id) === String(currentVariantId) ||
+                String(w.product_id) === String((item as any).product_id ?? item.id) ||
+                String(w.id) === String(item.id)
+            )
+          : (item as any).is_wishlisted);
 
   const handleToggleFavorite = () => {
     if (!isLoggedIn) {
@@ -77,7 +90,7 @@ const BestSellingCard: React.FC<Props> = ({ item, index }) => {
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.95}
-      onPress={() => navigation.navigate("ProductDetails", { product: item })}
+      onPress={() => navigation.push("ProductDetails", { product: item })}
     >
       <ImageBackground 
         source={{ uri: item.image }} 
@@ -87,13 +100,14 @@ const BestSellingCard: React.FC<Props> = ({ item, index }) => {
         
         {/* Top Badges */}
         <View style={styles.topRow}>
+{/* 
           <LinearGradient 
             colors={['#E84C3D', '#C0392B']} 
             start={{x: 0, y: 0}} end={{x: 1, y: 1}}
             style={styles.rankBadge}
           >
             <Text style={styles.rankText}>#{index + 1} TOP</Text>
-          </LinearGradient>
+          </LinearGradient> */}
 
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <TouchableOpacity 
@@ -105,7 +119,7 @@ const BestSellingCard: React.FC<Props> = ({ item, index }) => {
                 size={scale(15)} 
                 color={isFavorite ? "#E84C3D" : "#0A0A0A"} 
               />
-            </TouchableOpacity>
+            </TouchableOpacity> 
           </View>
         </View>
 
@@ -123,8 +137,7 @@ const BestSellingCard: React.FC<Props> = ({ item, index }) => {
             </View>
 
             <TouchableOpacity
-              style={[styles.addBtn, item.inStock === false && { opacity: 0.5 }]}
-              disabled={item.inStock === false}
+              style={styles.addBtn}
               onPress={async () => {
                 try {
                   const payload = {
@@ -158,7 +171,7 @@ const BestSellingCard: React.FC<Props> = ({ item, index }) => {
               }}
             >
               <Ionicons 
-                name={item.inStock === false ? "close" : "bag-add"} 
+                name={"bag-add"} 
                 size={scale(18)} 
                 color="#000" 
               />
@@ -189,11 +202,12 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'space-between',
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: scale(10),
-  },
+topRow: {
+  flexDirection: 'row',
+  justifyContent: 'flex-end',
+  alignItems: 'center',
+  padding: scale(10),
+},
   rankBadge: {
     paddingHorizontal: scale(8),
     paddingVertical: verticalScale(4),

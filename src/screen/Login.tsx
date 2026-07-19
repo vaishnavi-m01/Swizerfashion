@@ -76,7 +76,6 @@ const Login = () => {
                 console.log('token     :', storedAuth.token);
                 console.log('user      :', JSON.stringify(storedAuth.user, null, 2));
                 console.log('axios Auth:', require('../config/apiConfig').default.defaults.headers.common['Authorization'] ?? 'NOT SET \u274c');
-                console.log('================================================');
 
                 if (Platform.OS === 'android') {
                     ToastAndroid.show('Login successful! Welcome back 👋', ToastAndroid.SHORT);
@@ -227,11 +226,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderRadius: moderateScale(20),
         padding: moderateScale(24),
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-        elevation: 4,
+        borderWidth: 1,
+        borderColor: '#EFEFEF',
     },
     title: {
         fontSize: scale(22),

@@ -14,12 +14,18 @@ interface WishlistState {
     items: WishlistItem[];
     loading: boolean;
     wishlistUpdateTrigger: number;
+    isLoaded: boolean;
+    addedVariantIds: number[];
+    removedVariantIds: number[];
 }
 
 const initialState: WishlistState = {
     items: [],
     loading: false,
     wishlistUpdateTrigger: 0,
+    isLoaded: false,
+    addedVariantIds: [],
+    removedVariantIds: [],
 };
 
 const pendingWishlistRequests: Map<number | string, number> = new Map();
@@ -60,10 +66,13 @@ export const addToWishlistAsync = createAsyncThunk(
                 variant_id: item.variant_id,
                 product_id: item.product_id ?? null
             };
-            console.log("WishlistPayload", payload)
             const response = await api.post('/wishlist/add', payload);
-            dispatch(fetchWishlistAsync() as any);
-            return response.data?.data ?? response.data ?? null;
+            return {
+                id: Math.random().toString(), // temporary ID
+                product_id: item.product_id,
+                variant_id: item.variant_id,
+                product: item.product
+            };
         } catch (error: any) {
             console.log('[Wishlist] POST /wishlist/add ERROR:', error?.response?.status);
             return null;
@@ -115,7 +124,6 @@ export const removeFromWishlistAsync = createAsyncThunk(
                 'Wishlist removed successfully',
                 ToastAndroid.SHORT,
             );
-            dispatch(fetchWishlistAsync() as any);
             return { productId, wishlistItemId, variantId };
         } catch (error: any) {
             console.log('[Wishlist] POST /wishlist/remove ERROR:', error?.response?.status);
@@ -141,6 +149,7 @@ export const wishlistSlice = createSlice({
             })
             .addCase(fetchWishlistAsync.fulfilled, (state, action) => {
                 state.loading = false;
+                state.isLoaded = true;
                 if (Array.isArray(action.payload)) {
                     state.items = action.payload.map((item: any) => ({
                         id: item.id ?? item.wishlist_item_id,
@@ -162,9 +171,14 @@ export const wishlistSlice = createSlice({
             .addCase(addToWishlistAsync.pending, (state) => {
                 state.loading = true;
             })
-            .addCase(addToWishlistAsync.fulfilled, (state) => {
+            .addCase(addToWishlistAsync.fulfilled, (state, action) => {
                 state.loading = false;
                 state.wishlistUpdateTrigger += 1;
+                if (action.payload) {
+                    state.items.push(action.payload as any);
+                    state.addedVariantIds.push(action.payload!.variant_id);
+                    state.removedVariantIds = state.removedVariantIds.filter(id => String(id) !== String(action.payload!.variant_id));
+                }
             })
             .addCase(addToWishlistAsync.rejected, (state) => {
                 state.loading = false;
@@ -175,9 +189,18 @@ export const wishlistSlice = createSlice({
             .addCase(removeFromWishlistAsync.pending, (state) => {
                 state.loading = true;
             })
-            .addCase(removeFromWishlistAsync.fulfilled, (state) => {
+            .addCase(removeFromWishlistAsync.fulfilled, (state, action) => {
                 state.loading = false;
                 state.wishlistUpdateTrigger += 1;
+                if (action.payload) {
+                    state.items = state.items.filter(item => 
+                        String(item.product_id) !== String(action.payload!.productId)
+                    );
+                    if (action.payload.variantId) {
+                        state.removedVariantIds.push(action.payload!.variantId as number);
+                        state.addedVariantIds = state.addedVariantIds.filter(id => String(id) !== String(action.payload!.variantId));
+                    }
+                }
             })
             .addCase(removeFromWishlistAsync.rejected, (state) => {
                 state.loading = false;

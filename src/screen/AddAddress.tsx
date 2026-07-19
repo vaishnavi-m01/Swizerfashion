@@ -22,7 +22,6 @@ const AddAddress = () => {
   const navigation = useNavigation();
   const route = useRoute<any>();
   
-  // Extract addressId if passed from delivery list screen edit click trigger
   const addressId = route.params?.addressId;
   const isEditMode = !!addressId;
 
@@ -167,7 +166,7 @@ const AddAddress = () => {
           style={styles.scrollContainer}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: isKeyboardVisible ? verticalScale(140) : verticalScale(100) }
+            { paddingBottom: isKeyboardVisible ? verticalScale(200) : verticalScale(160) }
           ]}
         >
           <Text style={styles.title}>{isEditMode ? 'Edit Address' : 'Add New Address'}</Text>
@@ -359,7 +358,6 @@ const styles = StyleSheet.create({
     paddingVertical: verticalScale(14),
     fontSize: moderateScale(15),
     color: '#1F2937',
-    // Shadows completely removed for flat look
   },
   textArea: {
     height: verticalScale(90),
@@ -406,8 +404,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: moderateScale(20),
-    paddingTop: verticalScale(16),
-    paddingBottom: Platform.OS === 'ios' ? verticalScale(34) : verticalScale(24),
+    paddingTop: verticalScale(12), 
+    paddingBottom: Platform.OS === 'ios' ? verticalScale(34) : verticalScale(50), 
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderColor: '#F3F4F6',
@@ -421,7 +419,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: moderateScale(14),
-    paddingVertical: verticalScale(16),
+    paddingVertical: verticalScale(12), 
     alignItems: 'center',
     backgroundColor: '#ffffff',
   },
@@ -434,9 +432,8 @@ const styles = StyleSheet.create({
     width: '50%',
     backgroundColor: colors.accentDark || '#4F46E5',
     borderRadius: moderateScale(14),
-    paddingVertical: verticalScale(16),
+    paddingVertical: verticalScale(12), 
     alignItems: 'center',
-    // Shadows completely removed for flat look
   },
   saveBtnDisabled: {
     opacity: 0.6,

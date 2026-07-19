@@ -99,11 +99,35 @@ const DeliveryAddress = () => {
         );
     };
 
+    const setPrimaryAddress = async (id: string) => {
+        try {
+            setLoading(true);
+            console.log(`[Address] PATCH /address/${id}/primary?user_id=${userId}`);
+            const response = await api.patch(`/address/${id}/primary?user_id=${userId}`);
+            
+            if (response.data?.status || response.status === 200) {
+                // Update local state so it immediately reflects as default
+                setAddresses(prev => prev.map(item => ({
+                    ...item,
+                    isDefault: item.id === id
+                })));
+                setSelectedAddress(id);
+            } else {
+                Alert.alert('Error', response.data?.message || 'Failed to set primary address');
+            }
+        } catch (error: any) {
+            console.log('[Address] PATCH error', error?.response?.data ?? error.message);
+            Alert.alert('Error', error?.response?.data?.message || 'Failed to set primary address');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const renderItem = ({ item }: { item: Address }) => (
         <AddressCard
             item={item}
-            selected={selectedAddress === item.id}
-            onSelect={() => setSelectedAddress(item.id)}
+            selected={item.isDefault || selectedAddress === item.id}
+            onSelect={() => setPrimaryAddress(item.id)}
             onEdit={() => navigation.navigate('AddAddress', { addressId: item.id })} // Forwards tracking state parameters dynamically
             onDelete={() => handleDeleteAddress(item.id)}
         />
@@ -170,7 +194,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         left: scale(16),
         right: scale(16),
-        bottom: verticalScale(24),
+        bottom: verticalScale(50),
         height: verticalScale(54),
         borderRadius: moderateScale(14),
         backgroundColor: colors.accent,

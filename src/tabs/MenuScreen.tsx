@@ -15,7 +15,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import api from '../config/apiConfig';
 import { IMAGE_BASE_URL } from '../api/apiBaseUrl';
 import { CategoryCard } from '../component/CategoryCard';
-import { scale, verticalScale, HORIZONTAL_PADDING } from '../utils/responsive';
+import { scale, verticalScale, HORIZONTAL_PADDING, moderateScale } from '../utils/responsive';
 import { useAppSelector } from '../store/hooks';
 
 interface SubCategory {
@@ -40,6 +40,7 @@ interface Category {
 interface MainCategory {
     id: number;
     name: string;
+    image?: string;
     categories: Category[];
 }
 
@@ -345,10 +346,9 @@ const styles = StyleSheet.create({
         paddingVertical: verticalScale(10),
     },
     headerTitle: {
-        fontSize: scale(24),
-        fontWeight: '800',
+        fontSize: moderateScale(18),
+        fontWeight: '900',
         color: '#000',
-        letterSpacing: -0.5,
     },
     headerIcons: {
         flexDirection: 'row',

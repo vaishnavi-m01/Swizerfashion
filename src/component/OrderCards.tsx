@@ -1,5 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View, Image, TouchableOpacity } from "react-native";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { moderateScale, scale, verticalScale } from "../utils/responsive";
 import { IMAGE_BASE_URL } from "../api/apiBaseUrl";
 
@@ -19,6 +20,7 @@ interface OrderCardProps {
   price: number;
   date: string;
   onPress: () => void;
+  onAssignStaff?: () => void;
 }
 
 const FALLBACK_IMAGE = "https://loremflickr.com/200/200/fashion";
@@ -44,6 +46,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
   price,
   date,
   onPress,
+  onAssignStaff,
 }) => {
   const firstProduct = products[0];
   const remainingCount = products.length - 1;
@@ -87,6 +90,11 @@ const getStatusStyle = () => {
         <Text style={styles.orderId}>ID: #{orderId}</Text>
 
         <View style={styles.badgesRow}>
+          {onAssignStaff && (
+            <TouchableOpacity onPress={onAssignStaff} style={styles.staffIcon}>
+              <Ionicons name="person-circle-outline" size={scale(20)} color="#4B5563" />
+            </TouchableOpacity>
+          )}
           {paymentStatus && (
             <View style={[styles.badge, styles.paymentBadge]}>
               <Text style={[styles.badgeText, styles.paymentBadgeText]}>
@@ -167,6 +175,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: scale(6),
+  },
+  staffIcon: {
+    padding: scale(2),
   },
   paymentBadge: {
     backgroundColor: "#F3F4F6", 

@@ -16,6 +16,7 @@ interface WishlistCardProps {
         image?: string;
         price?: string;
         oldPrice?: string;
+        product_varient?: any;
     };
     onRemove?: (item: any) => void;
     onAddToCart?: (item: any) => void;
@@ -45,7 +46,7 @@ const WishlistCard: React.FC<WishlistCardProps> = ({ item, onRemove, onAddToCart
     const handlePress = () => {
         const variantId = item.product_varient?.id ?? item.variant_id;
         if (!variantId) return;
-        navigation.navigate("ProductDetails", { id: variantId });
+        navigation.push("ProductDetails", { id: variantId });
     };
 
     return (

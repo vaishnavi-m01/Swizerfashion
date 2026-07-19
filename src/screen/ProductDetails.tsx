@@ -14,6 +14,8 @@ import {
     ToastAndroid,
     RefreshControl,
     ActivityIndicator,
+    Animated,
+    Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -22,13 +24,14 @@ import Entypo from 'react-native-vector-icons/Entypo';
 import { scale, verticalScale, moderateScale, HORIZONTAL_PADDING } from '../utils/responsive';
 import ProductCardSkeleton from '../component/ProductCardSkeleton';
 import ProductCard from '../component/ProductCard';
+import BestSellingCard from '../component/BestSellingCard';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchWishlistAsync, removeFromWishlistAsync, addToWishlistAsync } from '../store/slices/wishlistSlice';
 import { setCartCount } from '../store/slices/cartSlice';
 import api from '../config/apiConfig';
 import { IMAGE_BASE_URL } from '../api/apiBaseUrl';
-import { defineAnimation } from 'react-native-reanimated';
 import RNShare from 'react-native-share';
+import RNFS from 'react-native-fs';
 const { width } = Dimensions.get('window');
 export type ColorVariant = {
     id: number;
@@ -37,48 +40,7 @@ export type ColorVariant = {
     image: string;
     price: string;
 };
-const popularProducts = [
-    {
-        id: 1,
-        name: "Women's Dress",
-        price: '₹1,499',
-        oldPrice: '₹1,899',
-        discount: '20% OFF',
-        image: 'https://loremflickr.com/250/350/fashion?lock=1',
-        rating: 4.5,
-        reviews: 128,
-        inStock: true,
-    },
-    {
-        id: 2,
-        name: "Men's Shirt",
-        price: '₹999',
-        image: 'https://loremflickr.com/250/350/fashion?lock=2',
-        rating: 4,
-        reviews: 85,
-        inStock: true,
-    },
-    {
-        id: 3,
-        name: "Women's Saree",
-        price: '₹2,499',
-        image: 'https://loremflickr.com/250/350/fashion?lock=3',
-        rating: 5,
-        reviews: 256,
-        inStock: true,
-    },
-    {
-        id: 4,
-        name: "Men's T-Shirt",
-        price: '₹799',
-        oldPrice: '₹999',
-        discount: '20% OFF',
-        image: 'https://loremflickr.com/250/350/fashion?lock=4',
-        rating: 4.5,
-        reviews: 92,
-        inStock: true,
-    },
-];
+
 const ProductDetails = () => {
     const navigation = useNavigation<any>();
     const route = useRoute<any>();
@@ -86,13 +48,22 @@ const ProductDetails = () => {
     const wishlistItems = useAppSelector(state => state.wishlist.items);
     const isLoggedIn = useAppSelector(state => state.auth.isLoggedIn);
     const userId = useAppSelector(state => state.auth.userId);
+    const isWishlistLoaded = useAppSelector(state => state.wishlist.isLoaded);
+    const addedVariantIds = useAppSelector(state => state.wishlist.addedVariantIds);
+    const removedVariantIds = useAppSelector(state => state.wishlist.removedVariantIds);
     const wishlistUpdateTrigger = useAppSelector(state => state.wishlist.wishlistUpdateTrigger);
     const [apiProduct, setApiProduct] = useState<any>(null);
+    console.log("apiProduct", apiProduct)
     const [apiVariants, setApiVariants] = useState<any[]>([]);
+    const [reviews, setReviews] = useState<any[]>([]);
+    const [visibleReviewsCount, setVisibleReviewsCount] = useState(5);
+    const [avgRating, setAvgRating] = useState<number>(0);
+    const [reviewCount, setReviewCount] = useState<number>(0);
     const [isLoading, setIsLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [isAddingToCart, setIsAddingToCart] = useState(false);
-    const [isBuyingNow, setIsBuyingNow] = useState(false);
+    const [bestSelling, setBestSelling] = useState<any[]>([]);
+    const [isSharing, setIsSharing] = useState(false);
 
     let product: any = null;
 
@@ -141,8 +112,9 @@ const ProductDetails = () => {
             discount: discount,
             // Description and GST also live inside the nested detail object
             description: apiProduct.detail?.description || apiProduct.description || '',
-            category: "Apparel",
-            rating: apiProduct.avg_rating || 4.5,
+            category: apiProduct.detail?.category?.name || "Apparel",
+            rating: avgRating || 0,
+            review_count: reviewCount || 0,
             sizes: sizes,
             colorVariants: colorVariants,
             images: images,
@@ -198,8 +170,46 @@ const ProductDetails = () => {
                 if (!id) return;
                 const response = await api.get(`/products/${id}`);
                 if (response.data?.status && response.data?.data) {
-                    setApiProduct(response.data.data.product);
+                    const fetchedProduct = response.data.data.product;
+                    setApiProduct(fetchedProduct);
                     setApiVariants(response.data.data.variants || []);
+                    setAvgRating(response.data.data.avg_rating || 0);
+                    setReviewCount(response.data.data.review_count || 0);
+
+                    // Fetch reviews for this product using the PARENT product ID
+                    const parentProductId = fetchedProduct.product_id || fetchedProduct.id;
+                    const reviewRes = await api.get(`/reviews?product_id=${parentProductId}`);
+
+                    if (reviewRes.data?.status && reviewRes.data?.data) {
+                        const fetchedReviews = Array.isArray(reviewRes.data.data) ? reviewRes.data.data : [reviewRes.data.data];
+                        const productReviews = fetchedReviews.filter((r: any) => String(r.product_id) === String(parentProductId));
+                        setReviews(productReviews);
+                    }
+
+                    // Fetch Best Selling
+                    const bestRes = await api.get('/best-selling');
+                    if (bestRes.data?.status && Array.isArray(bestRes.data?.data)) {
+                        const mapped = bestRes.data.data.map((variant: any) => {
+                            const imageUrl = variant.thumbnail
+                                ? (variant.thumbnail.startsWith('http') ? variant.thumbnail : `${IMAGE_BASE_URL}${variant.thumbnail}`)
+                                : `https://loremflickr.com/250/350/fashion?lock=${variant.id}`;
+                            return {
+                                id: variant.id,
+                                product_id: variant.product_id,
+                                variant_id: variant.id,
+                                color_id: variant.color_id ?? null,
+                                size_id: variant.size_id ?? null,
+                                name: variant.product?.name || 'Product',
+                                image: imageUrl,
+                                price: `₹${parseFloat(variant.discount_price || variant.price).toFixed(0)}`,
+                                oldPrice: variant.discount_price ? `₹${parseFloat(variant.price).toFixed(0)}` : undefined,
+                                discount: variant.discount_percentage ? `${variant.discount_percentage}% OFF` : undefined,
+                                inStock: variant.stock > 0,
+                                is_wishlisted: Number(variant.is_wishlisted) === 1,
+                            };
+                        });
+                        setBestSelling(mapped);
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching product details:', error);
@@ -216,11 +226,24 @@ const ProductDetails = () => {
         if (!id) { setRefreshing(false); return; }
         api.get(`/products/${id}`).then(response => {
             if (response.data?.status && response.data?.data) {
-                setApiProduct(response.data.data.product);
+                const fetchedProduct = response.data.data.product;
+                setApiProduct(fetchedProduct);
                 setApiVariants(response.data.data.variants || []);
+                setAvgRating(response.data.data.avg_rating || 0);
+                setReviewCount(response.data.data.review_count || 0);
+
+                // Also refresh reviews
+                const parentProductId = fetchedProduct.product_id || fetchedProduct.id;
+                api.get(`/reviews?product_id=${parentProductId}`).then(reviewRes => {
+                    if (reviewRes.data?.status && reviewRes.data?.data) {
+                        const fetchedReviews = Array.isArray(reviewRes.data.data) ? reviewRes.data.data : [reviewRes.data.data];
+                        const productReviews = fetchedReviews.filter((r: any) => String(r.product_id) === String(parentProductId));
+                        setReviews(productReviews);
+                    }
+                }).catch(err => console.error('Review refresh error:', err));
             }
         }).catch(err => console.error('Refresh error:', err))
-          .finally(() => setRefreshing(false));
+            .finally(() => setRefreshing(false));
     };
 
     // Resolves the full API variant object matching the currently active color+size
@@ -249,16 +272,60 @@ const ProductDetails = () => {
         return getSelectedApiVariant()?.id ?? apiProduct?.id;
     };
 
-    // Now safe to compute — everything it depends on is already defined above
     const selectedApiVariant = product ? getSelectedApiVariant() : null;
-    const inWishlist = selectedApiVariant
-        ? (selectedApiVariant.is_wishlisted === '1' || selectedApiVariant.is_wishlisted === 1)
-        : false;
+    const currentVariantId = getSelectedVariantId();
+
+    const inWishlist = addedVariantIds.includes(currentVariantId)
+        ? true
+        : removedVariantIds.includes(currentVariantId)
+            ? false
+            : (isWishlistLoaded
+                ? wishlistItems.some((w: any) => String(w.product_id) === String(product?.product_id ?? product?.id))
+                : (selectedApiVariant ? (selectedApiVariant.is_wishlisted === '1' || selectedApiVariant.is_wishlisted === 1) : false));
+
+    const isOutOfStock = selectedApiVariant ? parseInt(selectedApiVariant.stock, 10) <= 0 : !product?.inStock;
+
+    // --- Hooks must be called before early return ---
+    const variantKey = activeVariant ? activeVariant.colorName : 'default';
+    const currentQuantity = quantities[variantKey] || 1;
+
+    const qtySlideAnim = useRef(new Animated.Value(0)).current;
+    const prevQuantityRef = useRef(currentQuantity);
+
+    // Shimmer for Add to Cart button
+    const shimmerAnim = useRef(new Animated.Value(-1)).current;
+    useEffect(() => {
+        const loop = Animated.loop(
+            Animated.timing(shimmerAnim, {
+                toValue: 2,
+                duration: 2000,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            })
+        );
+        loop.start();
+        return () => loop.stop();
+    }, [shimmerAnim]);
+
+    useEffect(() => {
+        if (currentQuantity !== prevQuantityRef.current) {
+            const isIncrease = currentQuantity > prevQuantityRef.current;
+            prevQuantityRef.current = currentQuantity;
+            qtySlideAnim.setValue(isIncrease ? 18 : -18);
+            Animated.spring(qtySlideAnim, {
+                toValue: 0,
+                useNativeDriver: true,
+                speed: 30,
+                bounciness: 6,
+            }).start();
+        }
+    }, [currentQuantity, qtySlideAnim]);
 
     if (isLoading || !product) {
         return (
-            <View style={[styles.container, { paddingTop: insets.top, paddingHorizontal: moderateScale(16) }]}>
+            <View style={[styles.container, { paddingTop: insets.top, paddingHorizontal: moderateScale(16), justifyContent: 'center', alignItems: 'center' }]}>
                 <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+                <ActivityIndicator size="large" color="#0A0A0A" />
             </View>
         );
     }
@@ -304,8 +371,6 @@ const ProductDetails = () => {
     if (!displayPrice) displayPrice = product.price;
 
     const formattedPrice = typeof displayPrice === 'string' ? displayPrice.replace(/[^0-9.]/g, '') : displayPrice;
-    const variantKey = activeVariant ? activeVariant.colorName : 'default';
-    const currentQuantity = quantities[variantKey] || 1;
 
     const incrementQty = () => {
         setQuantities(prev => ({ ...prev, [variantKey]: (prev[variantKey] || 1) + 1 }));
@@ -349,30 +414,9 @@ const ProductDetails = () => {
         }
     };
 
-    const handleBuyNow = () => {
-        if (!isLoggedIn) {
-            navigation.navigate('Login');
-            return;
-        }
-        setIsBuyingNow(true);
-        const variant_id = getSelectedVariantId();
-        navigation.navigate("CheckOutScreen", {
-            buyNow: true,
-            product_id: product.product_id ?? product.id,
-            variant_id: variant_id,
-            quantity: currentQuantity,
-            selectedSize: activeSize,
-            selectedColor: activeVariant,
-            price: formattedPrice,
-            productName: product.name,
-            productImage: displayImage,
-            gstPercent: product.gst,
-        });
-        // Reset after navigation queued
-        setTimeout(() => setIsBuyingNow(false), 800);
-    };
-
     const handleShare = async () => {
+        if (isSharing) return;
+        setIsSharing(true);
         try {
             const variantId = getSelectedVariantId();
             const webLink = `https://www.swizerfashion.com/products/detail/${variantId}`;
@@ -381,14 +425,15 @@ const ProductDetails = () => {
                 title: product.name,
                 message: message,
             };
-            if (displayImage) {
-                shareOptions.url = displayImage;
-            }
+
+
             await RNShare.open(shareOptions);
         } catch (error: any) {
-            if (error?.message !== 'User did not share') {
+            if (error?.message !== 'User did not share' && !error?.message?.toLowerCase().includes('cancel') && !error?.message?.toLowerCase().includes('dismiss')) {
                 console.log('Share error:', error);
             }
+        } finally {
+            setIsSharing(false);
         }
     };
 
@@ -466,7 +511,11 @@ const ProductDetails = () => {
                                 },
                             };
                             if (inWishlist) {
-                                dispatch(removeFromWishlistAsync(wishlistPayload) as any).then(() => {
+                                const removePayload = {
+                                    productId: product?.product_id ?? product?.id,
+                                    variantId: bestVariantId
+                                };
+                                dispatch(removeFromWishlistAsync(removePayload) as any).then(() => {
                                     ToastAndroid.show("Removed from wishlist", ToastAndroid.SHORT);
                                 });
                             } else {
@@ -479,8 +528,12 @@ const ProductDetails = () => {
                         <Ionicons name={inWishlist ? "heart" : "heart-outline"} size={moderateScale(20)} color={inWishlist ? "#E84C3D" : "#0A0A0A"} />
                     </TouchableOpacity>
                     {/* Share Button */}
-                    <TouchableOpacity style={styles.floatingShareBtn} onPress={handleShare}>
-                        <Entypo name="share" color="#0A0A0A" size={moderateScale(18)} />
+                    <TouchableOpacity style={styles.floatingShareBtn} onPress={handleShare} disabled={isSharing}>
+                        {isSharing ? (
+                            <ActivityIndicator size="small" color="#0A0A0A" />
+                        ) : (
+                            <Entypo name="share" color="#0A0A0A" size={moderateScale(18)} />
+                        )}
                     </TouchableOpacity>
                 </View>
                 {/* Details Section */}
@@ -490,17 +543,31 @@ const ProductDetails = () => {
                         <View style={styles.ratingBox}>
                             <Ionicons name="star" size={moderateScale(14)} color="#FFC107" />
                             <Text style={styles.ratingVal}>{product.rating}</Text>
-                            <Text style={styles.ratingReviews}>({product.reviews || 48} reviews)</Text>
+                            <Text style={styles.ratingReviews}>({product.review_count} reviews)</Text>
                         </View>
                     </View>
                     <Text style={styles.name}>{product.name}</Text>
+                    {isOutOfStock && (
+                        <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 8 }}>
+                            <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 12 }}>Out of Stock</Text>
+                        </View>
+                    )}
                     <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: 'center' }}>
                         <Text style={styles.price}>₹{formattedPrice}</Text>
                         <View style={styles.qtyControlsInline}>
                             <TouchableOpacity style={styles.qtyBtnInline} onPress={decrementQty}>
                                 <Ionicons name="remove" size={moderateScale(16)} color="#0A0A0A" />
                             </TouchableOpacity>
-                            <Text style={styles.qtyValInline}>{currentQuantity}</Text>
+                            <View style={styles.qtyNumWrapInline}>
+                                <Animated.Text
+                                    style={[
+                                        styles.qtyValInline,
+                                        { transform: [{ translateY: qtySlideAnim }] },
+                                    ]}
+                                >
+                                    {currentQuantity}
+                                </Animated.Text>
+                            </View>
                             <TouchableOpacity style={styles.qtyBtnInline} onPress={incrementQty}>
                                 <Ionicons name="add" size={moderateScale(16)} color="#0A0A0A" />
                             </TouchableOpacity>
@@ -541,10 +608,7 @@ const ProductDetails = () => {
                             <View style={styles.divider} />
                         </>
                     )}
-                    {/* Description */}
-                    <Text style={styles.sectionHeading}>Product Description</Text>
-                    <Text style={styles.description}>{product.description}</Text>
-                    <View style={styles.divider} />
+
                     {/* Size Selector */}
                     <Text style={styles.sectionHeading}>Select Size</Text>
                     <View style={styles.sizesRow}>
@@ -561,6 +625,13 @@ const ProductDetails = () => {
                         ))}
                     </View>
                     <View style={styles.divider} />
+
+                    {/* Description */}
+                    <Text style={styles.sectionHeading}>Product Description</Text>
+                    <Text style={styles.description}>{product.description}</Text>
+                    <View style={styles.divider} />
+
+
                     {/* Delivery Card */}
                     <View style={styles.deliveryCard}>
                         <View style={styles.deliveryItem}>
@@ -573,45 +644,109 @@ const ProductDetails = () => {
                         </View>
                     </View>
                     <View style={styles.divider} />
-                    <Text style={styles.sectionHeading}>You May Also Like</Text>
-                    <FlatList
-                        data={isLoading ? [1, 2, 3, 4] as any[] : popularProducts}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        keyExtractor={item => (isLoading ? item.toString() : item.id.toString())}
-                        contentContainerStyle={{ paddingLeft: HORIZONTAL_PADDING, paddingRight: HORIZONTAL_PADDING }}
-                        renderItem={({ item }) => (
-                            isLoading ? <ProductCardSkeleton /> : <ProductCard item={item as any} onPress={() => console.log(item.name)} />
-                        )}
-                    />
+
+                    {/* Customer Reviews Section */}
+                    {reviews && reviews.length > 0 && (
+                        <View style={styles.reviewsContainer}>
+                            <Text style={styles.sectionHeading}>Customer Reviews</Text>
+                            {reviews.slice(0, visibleReviewsCount).map((review: any, index: number) => {
+                                // Dynamic username logic using user_name from API
+                                const userName = review.user_name || `User ${review.user_id || ''}`;
+                                const initial = userName.charAt(0).toUpperCase();
+
+                                // Format date if available
+                                let formattedDate = '';
+                                if (review.created_at) {
+                                    const d = new Date(review.created_at);
+                                    formattedDate = d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+                                }
+
+                                return (
+                                    <View key={review.id || index} style={styles.reviewCard}>
+                                        <View style={styles.reviewHeader}>
+                                            <View style={styles.reviewerInfo}>
+                                                <View style={styles.avatarCircle}>
+                                                    <Text style={styles.avatarText}>{initial}</Text>
+                                                </View>
+                                                <View>
+                                                    <Text style={styles.reviewerName}>{userName}</Text>
+                                                    {formattedDate ? <Text style={styles.reviewDate}>{formattedDate}</Text> : null}
+                                                </View>
+                                            </View>
+                                            <View style={styles.reviewRating}>
+                                                {[1, 2, 3, 4, 5].map((star) => (
+                                                    <Ionicons
+                                                        key={star}
+                                                        name={star <= (Number(review.rating) || 0) ? "star" : "star-outline"}
+                                                        size={scale(14)}
+                                                        color={star <= (Number(review.rating) || 0) ? "#F59E0B" : "#D1D5DB"}
+                                                    />
+                                                ))}
+                                            </View>
+                                        </View>
+
+                                        {!!review.title && (
+                                            <Text style={styles.reviewTitle}>{review.title}</Text>
+                                        )}
+                                        {!!review.comment && (
+                                            <Text style={styles.reviewComment}>{review.comment}</Text>
+                                        )}
+                                    </View>
+                                );
+                            })}
+
+                            {reviews.length > visibleReviewsCount && (
+                                <TouchableOpacity
+                                    style={styles.loadMoreBtn}
+                                    onPress={() => setVisibleReviewsCount(prev => prev + 5)}
+                                >
+                                    <Text style={styles.loadMoreBtnText}>See more reviews</Text>
+                                </TouchableOpacity>
+                            )}
+                            <View style={styles.divider} />
+                        </View>
+                    )}
+
+                    {bestSelling.length > 0 && (
+                        <>
+                            <Text style={styles.sectionHeading}>Best Selling</Text>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                            // contentContainerStyle={{ paddingLeft: HORIZONTAL_PADDING, paddingRight: HORIZONTAL_PADDING }}
+                            >
+                                {bestSelling.map((item, index) => (
+                                    <View key={item.id}>
+                                        <BestSellingCard item={item} index={index} />
+                                    </View>
+                                ))}
+                            </ScrollView>
+                        </>
+                    )}
                 </View>
             </ScrollView>
-            {/* Footer Buttons */}
+            {/* Footer: Full-width animated Add to Cart */}
             <View style={[styles.footer, { paddingBottom: insets.bottom > 0 ? insets.bottom : verticalScale(16) }]}>
                 <TouchableOpacity
                     style={[styles.cartAddBtn, isAddingToCart && styles.processingBtn]}
                     onPress={handleAddToCart}
-                    disabled={isAddingToCart || isBuyingNow}
+                    disabled={isAddingToCart}
+                    activeOpacity={0.85}
                 >
+                    <Animated.View
+                        style={[
+                            styles.shimmerOverlay,
+                            { transform: [{ translateX: shimmerAnim.interpolate({ inputRange: [-1, 2], outputRange: [-300, 300] }) }, { skewX: '-20deg' }] }
+                        ]}
+                        pointerEvents="none"
+                    />
                     {isAddingToCart ? (
-                        <ActivityIndicator size="small" color="#0A0A0A" style={{ marginRight: scale(6) }} />
+                        <ActivityIndicator size="small" color="#FFF" style={{ marginRight: scale(6) }} />
                     ) : (
-                        <Ionicons name="cart-outline" size={moderateScale(20)} color="#0A0A0A" style={{ marginRight: scale(6) }} />
+                        <Ionicons name="cart-outline" size={moderateScale(20)} color="#FFF" style={{ marginRight: scale(8) }} />
                     )}
                     <Text style={styles.cartAddBtnText}>
-                        {isAddingToCart ? 'Processing...' : 'Add to Cart'}
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.buyNowBtn, isBuyingNow && styles.processingBtnDark]}
-                    onPress={handleBuyNow}
-                    disabled={isAddingToCart || isBuyingNow}
-                >
-                    {isBuyingNow && (
-                        <ActivityIndicator size="small" color="#FFF" style={{ marginRight: scale(6) }} />
-                    )}
-                    <Text style={styles.buyNowBtnText}>
-                        {isBuyingNow ? 'Processing...' : 'Buy Now'}
+                        {isAddingToCart ? 'Adding to Cart...' : 'Add to Cart'}
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -656,7 +791,7 @@ const styles = StyleSheet.create({
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: scale(16), paddingVertical: verticalScale(12), borderBottomWidth: 1, borderBottomColor: '#F0F0F0', backgroundColor: '#FFFFFF', zIndex: 10 },
     headerBtn: { width: moderateScale(36), height: moderateScale(36), borderRadius: moderateScale(18), backgroundColor: '#F5F5F5', justifyContent: 'center', alignItems: 'center' },
     headerTitle: { fontSize: moderateScale(16), fontWeight: '800', color: '#0A0A0A', flex: 1, textAlign: 'center', marginHorizontal: scale(12) },
-    scrollContent: { paddingBottom: verticalScale(40) },
+    scrollContent: { paddingBottom: verticalScale(120) },
     galleryWrapper: { position: 'relative' },
     imageContainer: { width: width, height: verticalScale(340), backgroundColor: '#f8f9fa' },
     paginationDots: { position: 'absolute', bottom: verticalScale(14), flexDirection: 'row', width: '100%', justifyContent: 'center', alignItems: 'center' },
@@ -675,11 +810,92 @@ const styles = StyleSheet.create({
     price: { fontSize: moderateScale(22), fontWeight: '800', color: '#0A0A0A' },
     qtyControlsInline: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', borderRadius: moderateScale(20), padding: scale(4) },
     qtyBtnInline: { width: moderateScale(28), height: moderateScale(28), justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF', borderRadius: moderateScale(14) },
-    qtyValInline: { marginHorizontal: scale(12), fontWeight: '700', fontSize: moderateScale(14) },
-    divider: { height: 1, backgroundColor: '#EFEFEF', marginVertical: verticalScale(16) },
+    qtyNumWrapInline: { width: moderateScale(32), height: moderateScale(28), overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+    qtyValInline: { marginHorizontal: scale(4), fontWeight: '700', fontSize: moderateScale(14), color: '#0A0A0A' },
+    divider: {
+        height: 1,
+        backgroundColor: '#E5E7EB',
+        marginVertical: verticalScale(20),
+    },
+    reviewsContainer: {
+        paddingHorizontal: HORIZONTAL_PADDING,
+    },
+    reviewCard: {
+        paddingVertical: moderateScale(16),
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    reviewHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: verticalScale(12),
+    },
+    reviewerInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    avatarCircle: {
+        width: moderateScale(36),
+        height: moderateScale(36),
+        borderRadius: moderateScale(18),
+        backgroundColor: '#E0E7FF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: scale(10),
+    },
+    avatarText: {
+        fontSize: scale(16),
+        fontWeight: '700',
+        color: '#4F46E5',
+    },
+    reviewerName: {
+        fontSize: scale(14),
+        fontWeight: '600',
+        color: '#111827',
+        marginBottom: verticalScale(2),
+    },
+    reviewDate: {
+        fontSize: scale(11),
+        color: '#6B7280',
+    },
+    reviewRating: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    reviewTitle: {
+        fontSize: scale(14),
+        fontWeight: '700',
+        color: '#1F2937',
+        marginBottom: verticalScale(4),
+    },
+    reviewComment: {
+        fontSize: scale(13),
+        color: '#4B5563',
+        lineHeight: scale(20),
+    },
+    loadMoreBtn: {
+        marginTop: verticalScale(8),
+        alignItems: 'center',
+        paddingVertical: verticalScale(12),
+    },
+    loadMoreBtnText: {
+        fontSize: moderateScale(14),
+        fontWeight: '600',
+        color: '#4F46E5',
+    },
     variantHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(10) },
-    sectionHeading: { fontSize: moderateScale(16), fontWeight: '700', color: '#0A0A0A', marginBottom: verticalScale(8) },
-    selectedColorDot: { width: scale(12), height: scale(12), borderRadius: scale(6), marginLeft: scale(8) },
+    sectionHeading: {
+        fontSize: moderateScale(16),
+        fontWeight: '700', color: '#0A0A0A',
+        marginBottom: verticalScale(8)
+    },
+    selectedColorDot: {
+        width: scale(12),
+        height: scale(12),
+        borderRadius: scale(6),
+        marginLeft: scale(8)
+    },
     selectedVariantName: { fontSize: moderateScale(14), color: '#666', marginLeft: scale(6), fontWeight: '500' },
     variantsRow: { flexDirection: 'row' },
     variantCard: { width: scale(75), padding: scale(6), borderWidth: 1, borderColor: '#E0E0E0', borderRadius: moderateScale(8), marginRight: scale(10), alignItems: 'center', position: 'relative' },
@@ -704,13 +920,11 @@ const styles = StyleSheet.create({
     deliveryCard: { backgroundColor: '#F9F9F9', borderRadius: moderateScale(8), padding: scale(12) },
     deliveryItem: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(8) },
     deliveryText: { marginLeft: scale(8), fontSize: moderateScale(12), color: '#333' },
-    footer: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', paddingHorizontal: scale(16), paddingTop: verticalScale(12), backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#EFEFEF' },
-    cartAddBtn: { flex: 1, flexDirection: 'row', height: verticalScale(48), borderWidth: 1, borderColor: '#000', borderRadius: moderateScale(8), justifyContent: 'center', alignItems: 'center', marginRight: scale(12) },
-    cartAddBtnText: { fontWeight: '700', fontSize: moderateScale(14), color: '#000' },
-    buyNowBtn: { flex: 1, flexDirection: 'row', height: verticalScale(48), backgroundColor: '#000', borderRadius: moderateScale(8), justifyContent: 'center', alignItems: 'center' },
-    buyNowBtnText: { fontWeight: '700', fontSize: moderateScale(14), color: '#FFF' },
-    processingBtn: { borderColor: '#999', opacity: 0.7 },
-    processingBtnDark: { backgroundColor: '#555', opacity: 0.85 },
+    footer: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: scale(16), paddingTop: verticalScale(12), backgroundColor: '#FFF', borderTopWidth: 1, borderTopColor: '#EFEFEF' },
+    cartAddBtn: { flex: 1, flexDirection: 'row', height: verticalScale(52), backgroundColor: '#0A0A0A', borderRadius: moderateScale(14), justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+    cartAddBtnText: { fontWeight: '800', fontSize: moderateScale(15), color: '#FFF', letterSpacing: 0.3 },
+    shimmerOverlay: { position: 'absolute', width: '40%', height: '100%', backgroundColor: 'rgba(255,255,255,0.12)' },
+    processingBtn: { opacity: 0.7 },
     modalContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
     modalCloseBtn: { position: 'absolute', right: scale(20), zIndex: 11 },
     modalImage: { width: width, height: '80%' }
